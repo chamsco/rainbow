@@ -496,7 +496,7 @@
      Until one is installed (set `Wave.localModel = { classify(card) }`) a keyword scorer answers the same
      call, so nothing else changes the day the model arrives. */
   const TOPICS = {
-    Code: ['github', 'code', 'api', 'rust', 'python', 'javascript', 'developer', 'function', 'compiler', 'stack', 'bug', 'repo', 'software', 'programming'],
+    Code: ['github', 'code', 'api', 'rust', 'python', 'javascript', 'typescript', 'react', 'component', 'frontend', 'backend', 'database', 'css', 'html', 'server', 'debug', 'framework', 'library', 'developer', 'function', 'compiler', 'stack', 'bug', 'repo', 'software', 'programming'],
     Design: ['design', 'figma', 'typography', 'font', 'color', 'ui', 'ux', 'layout', 'brand', 'illustration', 'dribbble'],
     News: ['news', 'breaking', 'report', 'election', 'government', 'minister', 'court', 'police', 'war', 'times', 'post'],
     Science: ['science', 'study', 'research', 'physics', 'biology', 'space', 'nasa', 'climate', 'chemistry', 'paper', 'arxiv'],
@@ -536,6 +536,7 @@
   }
 
   Wave.canvas = {
+    topicWords: () => TOPICS,
     capture, classify, saveTab, saveUrl, addNote, add, remove, connect, touch, fit, flyToCard, openCollection, discover,
     showTopic: t => { setFilter(t); flyToTopic(t); },
     find: q => S().bookmarks.filter(b => [b.title, b.note, b.url, b.topic].some(x => (x || '').toLowerCase().includes(q.toLowerCase()))),

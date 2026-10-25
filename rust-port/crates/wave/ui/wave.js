@@ -2017,7 +2017,7 @@ function openSpaceSettings(s = space()) {
 
 /* Settings is a page with a left rail of sections, with its own left rail. */
 const SETTINGS_SECTIONS = [['look', 'Look and Feel'], ['tabs', 'Tabs and browsing'], ['profiles', 'Spaces and profiles'], ['mods', 'Extensions and themes'],
-  ['ask', 'Ask Wave'], ['keys', 'Keyboard shortcuts'], ['data', 'Data']];
+  ['ask', 'Ask Wave'], ['models', 'On-device models'], ['keys', 'Keyboard shortcuts'], ['data', 'Data']];
 const heading = t => h('h3', { class: 'set-h' }, t);
 function openSettings(section = 'look') {
   const st = state.settings;
@@ -2104,6 +2104,17 @@ function openSettings(section = 'look') {
       field('Anthropic API key', h('input', { type: 'password', value: st.apiKey, placeholder: 'sk-ant-…', autocomplete: 'off', oninput: e => { st.apiKey = e.target.value.trim(); save(); } })),
       h('p', { class: 'hint' }, 'Ask Wave opens with Ctrl+E. The key is kept on this device and sent only to api.anthropic.com. Without a key, the built-in model still runs simple commands.'),
     ],
+    models: () => {
+      Wave.onModels = () => { if (section === 'models') draw(); };
+      const [rows, mode] = Wave.modelsPage();
+      return [
+        heading('On-device models'),
+        h('p', { class: 'hint' }, 'Small models that run on this machine to sort your Canvas and to make quick decisions for Ask Wave. Installing downloads a model once from its public host; every decision after that stays here.'),
+        field('Use', seg([['both', 'Both together'], ['sorter', 'Sorter'], ['decider', 'Decider'], ['off', 'Off']], mode, v => { Wave.setModelMode(v); })),
+        ...rows,
+        h('p', { class: 'hint' }, 'Together, the Sorter answers when it is sure and hands close calls to the Decider.'),
+      ];
+    },
     keys: () => [heading('Keyboard shortcuts'), ...shortcutRows()],
     data: () => [
       heading('Data'),
@@ -2111,7 +2122,9 @@ function openSettings(section = 'look') {
         h('button', { class: 'btn', onclick: exportData }, 'Export…'),
         h('button', { class: 'btn', onclick: importData }, 'Import…'),
         h('button', { class: 'btn', onclick: () => openArchive() }, 'Archive'),
-        h('button', { class: 'btn', onclick: () => { closePanel(); setTimeout(() => Wave.onboard?.(), 200); } }, 'Replay welcome')),
+        h('button', { class: 'btn', onclick: () => { closePanel(); setTimeout(() => Wave.onboard?.('smooth'), 200); } }, 'Replay welcome'),
+        h('button', { class: 'btn', onclick: () => { closePanel(); setTimeout(() => Wave.onboard?.('pixel'), 200); } }, 'Replay pixel welcome')),
+      field('First-run welcome', seg([['smooth', 'Smooth'], ['pixel', 'Pixel'], ['both', 'Both']], st.welcome || 'smooth', v => set('welcome', v))),
     ],
   };
   function draw() {
