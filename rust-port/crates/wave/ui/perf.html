@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wave resize benchmark</title>
+<style>
+  :root { font: 15px/1.45 system-ui, sans-serif; color: #1b1f23; background: #fff; }
+  body { margin: 0; }
+  header { display: flex; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #e3e6e8; position: sticky; top: 0; background: #fff; }
+  header b { flex: none; }
+  header span { flex: 1; height: 28px; border-radius: 6px; background: #f1f3f4; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding: 16px; }
+  article { border: 1px solid #e3e6e8; border-radius: 10px; padding: 10px 12px; }
+  article h2 { margin: 0 0 6px; font-size: 14px; }
+  article p { margin: 0 0 4px; color: #57606a; font-size: 12px; }
+  .row { display: flex; gap: 6px; }
+  .row i { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #dfe3e6, #eef1f2); }
+</style>
+</head>
+<body>
+<header><b>Wave</b><span></span><span></span><span></span></header>
+<main id="list"></main>
+<script>
+  const list = document.getElementById('list');
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 400; i++) {
+    const a = document.createElement('article');
+    a.innerHTML = '<h2>Row ' + (i + 1) + '</h2><p>Some text that has to rewrap when the window changes width.</p>' +
+      '<div class="row"><i></i><i></i><i></i></div>';
+    frag.append(a);
+  }
+  list.append(frag);
+</script>
+</body>
+</html>

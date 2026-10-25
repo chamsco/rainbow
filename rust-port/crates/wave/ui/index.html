@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wave</title>
+<link rel="stylesheet" href="wave.css">
+<link rel="stylesheet" href="canvas.css">
+</head>
+<body>
+<div id="app" class="app">
+  <header class="topbar" id="topbar" data-drag aria-label="Toolbar"></header>
+
+  <!-- Compact mode: one bar across the top of the window, floating over the page. The
+       navigation, address pill and window controls are moved in here, not copied. -->
+  <div class="cbar" id="cbar" data-drag aria-label="Compact toolbar">
+    <div class="cb-left"><span class="cb-slot" id="cbWin"></span><span class="cb-slot" id="cbNav"></span></div>
+    <div class="cb-mid" id="cbMid"></div>
+    <div class="cb-right">
+      <button class="icon-btn sm" id="cbNewTab" title="New Tab (Ctrl+T)" aria-label="New Tab"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+      <button class="icon-btn sm" id="cbOverview" title="Tabs overview" aria-label="Tabs overview"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 6.5h12"/></svg></button>
+      <button class="icon-btn sm" id="cbSpaces" title="Spaces" aria-label="Spaces" aria-haspopup="menu"><svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="5" height="5" rx="1.4"/><rect x="9" y="2.5" width="5" height="5" rx="1.4"/><rect x="2" y="8.5" width="5" height="5" rx="1.4"/><rect x="9" y="8.5" width="5" height="5" rx="1.4"/></svg></button>
+      <span class="cb-slot" id="cbApp"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar" aria-label="Sidebar">
+    <div class="side-top" data-drag>
+      <div class="win-controls" id="winControls">
+        <button class="wc" data-win="close" aria-label="Close"></button>
+        <button class="wc" data-win="min" aria-label="Minimize"></button>
+        <button class="wc" data-win="max" aria-label="Maximize"></button>
+      </div>
+      <div class="nav">
+        <button class="icon-btn" id="appMenuBtn" title="Wave menu" aria-label="Wave menu" aria-haspopup="menu"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></svg></button>
+        <button class="icon-btn" id="toggleSidebar" title="Hide sidebar (Ctrl+S)" aria-label="Hide sidebar"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/></svg></button>
+        <button class="icon-btn" id="back" title="Back (Alt+Left)" aria-label="Back"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+        <button class="icon-btn" id="forward" title="Forward (Alt+Right)" aria-label="Forward"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+        <button class="icon-btn" id="reload" title="Reload (Ctrl+R)" aria-label="Reload"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/></svg></button>
+      </div>
+    </div>
+
+    <div class="library" id="library" hidden></div>
+
+    <div class="url-pill" id="urlPill" role="button" tabindex="0" title="Edit address (Ctrl+L)">
+      <button class="icon-btn sm url-copy" id="copyLink" title="Copy link" aria-label="Copy link"><svg class="ic-link" viewBox="0 0 16 16"><path d="M6.8 9.2 9.2 6.8"/><path d="M7.6 4.9 9 3.5a2.5 2.5 0 0 1 3.5 3.5l-1.4 1.4"/><path d="M8.4 11.1 7 12.5a2.5 2.5 0 0 1-3.5-3.5l1.4-1.4"/></svg><svg class="ic-ok" viewBox="0 0 16 16"><path d="M3.6 8.4 6.4 11.2 12.4 5.2"/></svg></button>
+      <span class="url-text" id="urlText">Search or enter address</span>
+      <span class="url-actions">
+        <button class="icon-btn sm" id="saveBtn" title="Save to Canvas (Ctrl+D)" aria-label="Save to Canvas"><svg viewBox="0 0 16 16"><path d="M4 2h8v12l-4-3-4 3z"/></svg></button>
+      </span>
+      <button class="icon-btn sm url-opts" id="linkOpts" title="Link options" aria-label="Link options"><svg viewBox="0 0 16 16"><path d="M3 5.5h10M3 10.5h10"/><circle cx="6.5" cy="5.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="9.5" cy="10.5" r="1.6" fill="currentColor" stroke="none"/></svg></button>
+    </div>
+
+    <div class="essentials" id="essentials" aria-label="Essentials"></div>
+
+    <div class="space-head" id="spaceHead">
+      <button class="space-name" id="spaceName" aria-haspopup="menu"></button>
+      <button class="icon-btn sm" id="spaceMenuBtn" aria-label="Space options"><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button>
+    </div>
+
+    <div class="tab-scroll" id="tabScroll">
+      <ul class="tab-list pinned" id="pinnedList" data-section="pinned" aria-label="Pinned tabs"></ul>
+      <div class="divider" id="todayDivider"><span></span><button id="clearToday" class="link-btn">Clear</button></div>
+      <button class="new-tab-row" id="newTabRow"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg><span>New Tab</span></button>
+      <ul class="tab-list today" id="todayList" data-section="today" aria-label="Today tabs"></ul>
+    </div>
+
+    <div class="media-stack" id="mediaStack" hidden aria-label="Now playing"></div>
+
+    <div class="side-bottom">
+      <button class="icon-btn" id="canvasBtn" title="Canvas (Ctrl+Shift+K)" aria-label="Open Canvas"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="6" rx="1.2"/><rect x="9" y="2" width="5" height="4" rx="1.2"/><rect x="2" y="10" width="5" height="4" rx="1.2"/><rect x="9" y="8" width="5" height="6" rx="1.2"/></svg></button>
+      <div class="space-dots" id="spaceDots" role="tablist" aria-label="Spaces"></div>
+      <button class="icon-btn" id="newSpaceBtn" title="New space, folder or tab" aria-label="New" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+    </div>
+
+    <!-- Creating a space takes over the sidebar: the fields sit where the space list will
+         be, and the page stays live behind them. -->
+    <div class="newspace" id="newSpace" role="document" aria-label="Create a Space" hidden></div>
+
+    <!-- Compact mode: the peeked sidebar's own right edge grows it from half the sidebar to
+         all of it. It lives inside the sidebar because the chrome is clipped to the column. -->
+    <div class="peek-grow" id="peekGrow" aria-hidden="true"></div>
+  </aside>
+  <div class="sidebar-resizer" id="sidebarResizer" aria-hidden="true"></div>
+
+  <main class="page-card" id="pageCard">
+    <div class="page" id="page"></div>
+    <div class="split-divider" id="splitDivider" hidden role="separator" aria-label="Resize split view"></div>
+    <div class="empty" id="empty">
+      <div class="empty-mark" aria-hidden="true"></div>
+      <p>Press <kbd>Ctrl</kbd> <kbd>T</kbd> to open something, or <kbd>Ctrl</kbd> <kbd>E</kbd> to ask Wave.</p>
+    </div>
+    <section class="canvas-view" id="canvasView" hidden></section>
+  </main>
+</div>
+
+<div class="edge-hover" id="edgeHover" aria-hidden="true"></div>
+
+<!-- Compact mode keeps a hairline where the furniture used to be: the window still has an edge. -->
+<div class="compact-frame" id="compactFrame" aria-hidden="true"></div>
+
+<!-- Overlays draw over a blurred snapshot of the page (the page itself is a native view). -->
+<div class="veil" id="veil" hidden><img id="veilShot" alt=""></div>
+
+<div class="cmdbar" id="cmdbar" role="dialog" aria-label="Command bar" hidden>
+  <div class="cmd-chips" id="cmdChips" aria-label="Sites in this space"></div>
+  <div class="cmd-input">
+    <span class="cmd-scope" id="cmdScope" hidden></span>
+    <input id="cmdInput" autocomplete="off" spellcheck="false" placeholder="Search tabs, bookmarks, history or the web">
+  </div>
+  <ul id="cmdResults" role="listbox"></ul>
+  <div class="cmd-foot"><span id="cmdFoot"></span><kbd>Esc</kbd></div>
+</div>
+
+<div class="ask" id="ask" role="dialog" aria-label="Ask Wave" hidden>
+  <div class="ask-log" id="askLog" aria-live="polite"></div>
+  <form class="ask-row" id="askForm">
+    <button type="button" class="model-chip" id="modelChip" aria-haspopup="listbox"></button>
+    <button type="button" class="mode-btn" id="askMode" aria-pressed="false" title="Chat only: talk without changing anything in Wave"><svg viewBox="0 0 16 16"><path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/></svg><span>Chat</span></button>
+    <input id="askInput" autocomplete="off" placeholder="Ask Wave to do something: open, organise, save, find…">
+    <button type="button" class="icon-btn" id="askMic" title="Dictate" aria-label="Dictate"><svg viewBox="0 0 16 16"><rect x="6" y="1.8" width="4" height="8" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.2"/></svg></button>
+    <button type="submit" class="ask-send" aria-label="Send"><svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></button>
+  </form>
+  <ul class="model-menu" id="modelMenu" role="listbox" hidden></ul>
+</div>
+
+<div class="panel" id="panel" role="dialog" hidden>
+  <header><h2 id="panelTitle"></h2><button class="icon-btn" id="panelClose" aria-label="Close"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></header>
+  <div class="panel-body" id="panelBody"></div>
+</div>
+
+<div class="peek-ui" id="peekUi" hidden>
+  <button id="peekClose" title="Close (Esc)" aria-label="Close peek"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+  <button id="peekOpen" title="Open as a tab" aria-label="Open as a tab"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M7 3.5H4A1.5 1.5 0 0 0 2.5 5v7A1.5 1.5 0 0 0 4 13.5h7A1.5 1.5 0 0 0 12.5 12V9"/></svg></button>
+  <button id="peekSplit" title="Open in split view" aria-label="Open in split view"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M8 3v10"/></svg></button>
+</div>
+
+<div class="side-pop" id="arcPop" hidden role="dialog" aria-label="Recent files"></div>
+
+<div class="menu" id="menu" role="menu" hidden></div>
+<div class="menu sub" id="menuSub" role="menu" hidden></div>
+
+<!-- Site options: what you can do with the page you are on. -->
+<div class="sitepop" id="sitePop" role="dialog" aria-label="Site options" hidden>
+  <div class="sp-head">
+    <span class="sp-fav" id="spFav"></span>
+    <span class="sp-host" id="spHost"></span>
+    <span class="sp-secure" id="spSecure" title="Connection is secure"><svg viewBox="0 0 16 16"><rect x="4" y="7" width="8" height="6" rx="1.4"/><path d="M6 7V5a2 2 0 0 1 4 0v2"/></svg></span>
+  </div>
+  <button type="button" class="sp-row" id="spShare">
+    <span class="sp-ico"><svg viewBox="0 0 16 16"><path d="M8 10.5V2.5M5.5 5 8 2.5 10.5 5"/><path d="M3.5 9v4a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V9"/></svg></span>
+    <span class="sp-t">Share URL</span>
+  </button>
+  <div class="sp-row">
+    <button type="button" class="sp-main" id="spExt">
+      <span class="sp-ico"><svg viewBox="0 0 16 16"><path d="M8 2.5 13.5 8 8 13.5 2.5 8z"/><circle cx="8" cy="8" r="1.6"/></svg></span>
+      <span class="sp-t">Extensions</span>
+    </button>
+    <button type="button" class="sp-mini" id="spExtAdd" title="Add from the Chrome Web Store" aria-label="Add from the Chrome Web Store"><svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
+  </div>
+  <div class="sp-row">
+    <span class="sp-ico"><svg viewBox="0 0 16 16"><rect x="2" y="3.5" width="8.5" height="6" rx="1.4"/><path d="M10.5 6.5h2.2a1.3 1.3 0 0 1 1.3 1.3v2.4a1.3 1.3 0 0 1-1.3 1.3h-2.2z"/><path d="M5 13.5h3"/></svg></span>
+    <span class="sp-t">Automatic Picture-in-Picture</span>
+    <button type="button" class="sp-switch" id="spPip" role="switch" aria-checked="true" aria-label="Automatic Picture-in-Picture"><i></i></button>
+  </div>
+  <div class="sp-row">
+    <button type="button" class="sp-main" id="spSecureBtn">
+      <span class="sp-ico"><svg viewBox="0 0 16 16"><rect x="4" y="7" width="8" height="6" rx="1.4"/><path d="M6 7V5a2 2 0 0 1 4 0v2"/></svg></span>
+      <span class="sp-t" id="spSecureLabel">Secure</span>
+    </button>
+    <button type="button" class="sp-mini" id="spSecureMore" title="Site settings" aria-label="Site settings" aria-haspopup="menu"><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button>
+  </div>
+  <button type="button" class="sp-row" id="spShot">
+    <span class="sp-ico"><svg viewBox="0 0 16 16"><path d="M2.5 5.5h2l1-1.8h5l1 1.8h2a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z"/><circle cx="8" cy="9.2" r="2.1"/></svg></span>
+    <span class="sp-t">Screenshot</span>
+    <span class="sp-key">Ctrl+Shift+S</span>
+  </button>
+</div>
+
+<!-- Screenshots open in region mode: drag a piece of the page, or take it whole with Visible
+     and Full page standing by at the top right. -->
+<div class="shottool" id="shotTool" hidden>
+  <div class="st-scrim"></div>
+  <img class="st-img" id="stImg" alt="The page, frozen while you choose" draggable="false">
+  <div class="st-sel" id="stSel" hidden><span class="st-size" id="stSize"></span></div>
+  <div class="st-bar">
+    <span class="st-hint" id="stHint">Drag to select an area</span>
+    <span class="st-gap"></span>
+    <button type="button" class="st-btn" id="stVisible">Visible</button>
+    <button type="button" class="st-btn" id="stFull">Full page</button>
+    <button type="button" class="st-btn x" id="stClose" aria-label="Cancel screenshot"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="resize-edges" id="edges" aria-hidden="true"><i data-dir="n"></i><i data-dir="s"></i><i data-dir="e"></i><i data-dir="w"></i><i data-dir="ne"></i><i data-dir="nw"></i><i data-dir="se"></i><i data-dir="sw"></i></div>
+
+<script src="wave.js"></script>
+<script src="canvas.js"></script>
+<script src="jev.js"></script>
+<script src="agent.js"></script>
+<script src="library.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Build output
+**/target/
+
+# Local research and reference material: never published
+refs/
+
+# Release builds
+release/
+
+# Scratch and generated
+*.tmp
+*.bak
+__pycache__/
+*.pyc
+rust-port/crates/wave/ui/.qa.*
+.claude/
+.workbuddy-ai/
