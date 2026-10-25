@@ -22,7 +22,7 @@ away. The page is a real Chromium view; everything around it is Wave's own inter
 - **Library.** History, downloads, boosts, archive, saved prompts and routines in one searchable rail.
 - **Boosts.** Restyle or script any site.
 - **Media.** Players for background tabs, and automatic picture-in-picture.
-- **Extensions.** Unpacked Chromium extensions load from `%LOCALAPPDATA%\Wave\extensions`.
+- **Extensions.** Unpacked Chromium extensions load per profile from `%LOCALAPPDATA%\Wave\extensions\<profile>`, and can be pinned next to the address bar.
 
 ## Build and run
 

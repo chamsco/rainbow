@@ -619,7 +619,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-layout="toolbar"] .topbar {
   grid-column: 1 / -1; grid-row: 1; display: grid; align-items: center; gap: 8px; padding: 0;
   padding-left: var(--side-cur); transition: padding-left .24s var(--ease);
-  grid-template-columns: minmax(190px, 1fr) minmax(260px, 620px) minmax(150px, 1fr);
+  grid-template-columns: minmax(190px, 1fr) minmax(260px, 620px) minmax(190px, 1fr);
 }
 :root[data-layout="toolbar"][data-side="right"] .topbar { padding-left: 0; padding-right: var(--side-cur); transition: padding-right .24s var(--ease); }
 :root[data-layout="toolbar"] .topbar .nav { padding-left: 8px; }
@@ -650,9 +650,10 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
   container-type: inline-size;
 }
 :root[data-layout="compact"] .cbar { display: flex; }
-/* The sidebar owns the left of the window while it is out, so the bar starts after it. */
-:root[data-layout="compact"] .cbar { padding-left: calc(var(--side-cur, 0px) + 8px); }
-:root[data-layout="compact"][data-side="right"] .cbar { padding-left: 8px; padding-right: calc(var(--side-cur, 0px) + 8px); }
+/* The sidebar owns the left of the window while it is out, so the bar starts after it and never
+   covers it. */
+:root[data-layout="compact"] .cbar { left: var(--side-cur, 0px); padding-left: 8px; }
+:root[data-layout="compact"][data-side="right"] .cbar { left: 0; right: var(--side-cur, 0px); padding-left: 8px; padding-right: 8px; }
 :root[data-layout="compact"] .topbar, :root[data-layout="compact"] .sidebar-resizer { display: none; }
 :root[data-layout="compact"] .side-top { display: none; }
 .cb-left, .cb-right { display: flex; align-items: center; gap: 4px; flex: none; }
@@ -665,12 +666,11 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .cbar .win-controls { padding-left: 0; }
 /* Hover-only: the bar is away until the pointer asks for it, with the same leeway the sidebar
    gets, so brushing the top edge on the way somewhere does not flash the bar up. */
-:root[data-layout="compact"] .cbar.auto { transform: translateY(calc(-1 * var(--cbar-h) - 2px)); opacity: 0; pointer-events: none; }
-:root[data-layout="compact"] .app.cbar-near .cbar.auto,
-:root[data-layout="compact"] .app.peek .cbar.auto { transform: none; opacity: 1; pointer-events: auto; }
-/* The sidebar's peek carries the bar with it: one panel, one width, one top edge. */
-:root[data-layout="compact"] .app.peek .cbar { width: var(--peek-w); padding-left: 8px; padding-right: 8px; z-index: 31; }
-:root[data-layout="compact"][data-side="right"] .app.peek .cbar { left: auto; right: 0; }
+:root[data-layout="compact"] .cbar.auto { transform: translateY(-8px); opacity: 0; pointer-events: none; }
+:root[data-layout="compact"] .app.cbar-near .cbar.auto { transform: none; opacity: 1; pointer-events: auto; }
+/* Never together: with the sidebar out, a hover-only bar stays away. A bar that is always on stays,
+   and the peeked sidebar starts under it. */
+:root[data-layout="compact"][data-cbar-auto="off"] .app.collapsed.peek .sidebar { top: calc(var(--inset) + var(--cbar-h)); }
 /* At half the sidebar the bar gives its room to the address: the extras step aside on their own
    as it narrows, and come back as it is dragged out to the full sidebar. */
 @container (max-width: 210px) {
@@ -716,8 +716,8 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-layout="rail"] .side-top { justify-content: center; height: auto; }
 :root[data-layout="rail"] .side-top .nav > :not(#appMenuBtn):not(#toggleSidebar), :root[data-layout="rail"] .win-controls { display: none; }
 :root[data-layout="rail"] .side-top .nav { flex-direction: column; }
-:root[data-layout="rail"] .url-pill { width: 36px; height: 30px; padding: 0; justify-content: center; }
-:root[data-layout="rail"] .url-pill .url-text, :root[data-layout="rail"] .url-actions { display: none; }
+:root[data-layout="rail"] .sidebar .url-pill { width: 36px; height: 30px; padding: 0; justify-content: center; }
+:root[data-layout="rail"] .sidebar .url-pill .url-text, :root[data-layout="rail"] .sidebar .url-actions { display: none; }
 :root[data-layout="rail"] .essentials { --cols: 1 !important; width: 100%; }
 :root[data-layout="rail"] .space-name span:last-child, :root[data-layout="rail"] #spaceMenuBtn, :root[data-layout="rail"] .divider, :root[data-layout="rail"] .tab-list.sub { display: none; }
 :root[data-layout="rail"] .space-head { justify-content: center; padding: 6px 0 0; }
@@ -1002,15 +1002,105 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .ov-tab:hover { background: color-mix(in oklab, var(--glass-ink) 8%, transparent); }
 .ov-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Windows: the caption buttons live in a slim strip across the top of the page column, as in
-   other Windows browsers; the sidebar keeps the whole left edge, so nothing stacks. */
-:root[data-os="windows"][data-layout="sidebar"] .app, :root[data-os="windows"][data-layout="rail"] .app { grid-template-rows: 32px 1fr; }
+/* Windows: one top bar across the whole window (menu and navigation at the left, the address in the
+   middle, extensions and the window buttons at the right); the sidebar starts under it. */
+:root[data-os="windows"][data-layout="sidebar"] .app, :root[data-os="windows"][data-layout="rail"] .app { grid-template-rows: 38px 1fr; }
 :root[data-os="windows"][data-layout="sidebar"] .topbar, :root[data-os="windows"][data-layout="rail"] .topbar {
-  display: flex; grid-column: 3; grid-row: 1; align-items: stretch; justify-content: flex-end; padding: 0;
+  display: grid; grid-column: 1 / -1; grid-row: 1; align-items: center; gap: 8px; padding: 0 0 0 8px;
+  grid-template-columns: minmax(190px, 1fr) minmax(260px, 620px) minmax(190px, 1fr);
 }
-:root[data-os="windows"][data-layout="sidebar"][data-side="right"] .topbar, :root[data-os="windows"][data-layout="rail"][data-side="right"] .topbar { grid-column: 1; }
-:root[data-os="windows"][data-layout="sidebar"] .sidebar, :root[data-os="windows"][data-layout="rail"] .sidebar { grid-row: 1 / 3; }
-:root[data-os="windows"][data-layout="sidebar"] .sidebar-resizer, :root[data-os="windows"][data-layout="rail"] .sidebar-resizer { grid-row: 1 / 3; }
-:root[data-os="windows"][data-layout="sidebar"] .page-card, :root[data-os="windows"][data-layout="rail"] .page-card { grid-row: 2; margin-top: 2px; }
+:root[data-os="windows"][data-layout="sidebar"] .topbar > .nav, :root[data-os="windows"][data-layout="rail"] .topbar > .nav { grid-column: 1; }
+:root[data-os="windows"][data-layout="sidebar"] .topbar > .url-pill, :root[data-os="windows"][data-layout="rail"] .topbar > .url-pill {
+  grid-column: 2; width: 100%; max-width: none; margin: 0; height: 30px; min-width: 0;
+}
+:root[data-os="windows"][data-layout="sidebar"] .topbar > .tb-right, :root[data-os="windows"][data-layout="rail"] .topbar > .tb-right { grid-column: 3; }
+:root[data-os="windows"][data-layout="sidebar"] .side-top, :root[data-os="windows"][data-layout="rail"] .side-top { display: none; }
+:root[data-os="windows"][data-layout="sidebar"] .sidebar, :root[data-os="windows"][data-layout="rail"] .sidebar,
+:root[data-os="windows"][data-layout="sidebar"] .sidebar-resizer, :root[data-os="windows"][data-layout="rail"] .sidebar-resizer,
+:root[data-os="windows"][data-layout="sidebar"] .page-card, :root[data-os="windows"][data-layout="rail"] .page-card { grid-row: 2; }
+:root[data-os="windows"][data-layout="sidebar"] .page-card, :root[data-os="windows"][data-layout="rail"] .page-card { margin-top: 0; }
+:root[data-os="windows"][data-layout="sidebar"] .sidebar { padding-top: 2px; }
 :root[data-os="windows"][data-layout="rail"] .topbar .win-controls { display: flex; }
 :root[data-os="windows"][data-layout="sidebar"] .topbar .win-controls, :root[data-os="windows"][data-layout="rail"] .topbar .win-controls { margin: 0; align-self: stretch; }
+
+/* Toolbar slot: pinned extensions, then the window buttons */
+.tb-right { display: flex; align-items: center; justify-content: flex-end; align-self: stretch; gap: 4px; justify-self: end; }
+.ext-bar { display: flex; align-items: center; gap: 2px; }
+.ext-bar:empty { display: none; }
+.ext-pin { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 650; }
+.ext-pin:hover { background: var(--hover); }
+.ext-pin img { width: 18px; height: 18px; object-fit: contain; }
+.ext-ico { width: 22px; height: 22px; border-radius: 5px; object-fit: contain; display: grid; place-items: center; background: color-mix(in oklab, var(--glass-ink) 10%, transparent); font-size: 11px; font-weight: 650; flex: none; }
+.ext-row { display: flex; align-items: center; gap: 9px; }
+.ext-row > span:not(.ext-ico) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The site filter in the command bar: its name, with an x that appears on hover (or Delete). */
+.cmd-scope { position: relative; }
+.cmd-scope .cmd-scope-x { width: 16px; height: 16px; margin-left: 4px; border-radius: 50%; display: grid; place-items: center; opacity: 0; transition: opacity .12s; }
+.cmd-scope:hover .cmd-scope-x, .cmd-scope .cmd-scope-x:focus-visible { opacity: .75; }
+.cmd-scope .cmd-scope-x:hover { opacity: 1; background: color-mix(in oklab, var(--glass-ink) 14%, transparent); }
+.cmd-scope .cmd-scope-x svg { width: 10px; height: 10px; }
+
+/* Windows caption buttons: bigger, transparent, and a soft white wash on hover. */
+:root[data-os="windows"] .wc { width: 44px; height: 32px; border-radius: 8px; background: none; opacity: .9; color: var(--ink); }
+:root[data-os="windows"] .wc svg { width: 16px; height: 16px; stroke-width: 1.3; }
+:root[data-os="windows"] .wc:hover, :root[data-os="windows"] .win-controls:hover .wc:hover { background: color-mix(in oklab, var(--ink) 14%, transparent); opacity: 1; color: var(--ink); }
+:root[data-os="windows"] .wc[data-win="close"]:hover { background: color-mix(in oklab, var(--ink) 14%, transparent); color: var(--ink); }
+:root[data-os="windows"] .win-controls { gap: 2px; padding-right: 4px; }
+
+/* ---------- round 8: one radius scale, plain caption buttons, a roomier search bar ---------- */
+:root { --r-lg: 12px; --r-md: 8px; --r-sm: 6px; }
+.cmdbar, .ask, .panel, .menu, .sitepop, .side-pop, .toast, .shottool .st-bar { border-radius: var(--r-lg); }
+.cmdbar li, .menu button, .sitepop .sp-row, .sitepop .sp-main, .lib-item, .set-nav button, .ov-tab, .nsp-field, .nsp-row { border-radius: var(--r-md); }
+.cmd-chip { border-radius: var(--r-md); }
+.cmd-scope { border-radius: var(--r-sm); }
+
+/* Windows caption buttons: no colour at all; only the one under the pointer gets a light grey. */
+:root[data-os="windows"] .win-controls:hover .wc, :root[data-os="windows"] .win-controls:hover .wc[data-win] { background: none; }
+:root[data-os="windows"] .win-controls .wc:hover, :root[data-os="windows"] .win-controls:hover .wc[data-win]:hover {
+  background: color-mix(in oklab, var(--ink) 13%, transparent); color: var(--ink); opacity: 1;
+}
+
+
+/* Search / new tab: wider and bigger all round. */
+.cmdbar { width: min(880px, calc(100vw - 32px)); top: 12vh; }
+.cmd-chips { gap: 8px; padding: 16px 18px 0; }
+.cmd-chip { width: 50px; height: 42px; }
+.cmd-chip .fav { width: 24px; height: 24px; border-radius: 6px; }
+.cmd-chip svg { width: 16px; height: 16px; }
+.cmd-input { gap: 10px; padding: 14px 22px 16px; }
+.cmd-input input { font-size: 19px; padding: 4px 0; }
+.cmd-scope { font-size: 14px; padding: 6px 12px 6px 8px; gap: 7px; }
+.cmd-scope .fav { width: 18px; height: 18px; border-radius: 4px; }
+.cmdbar ul { padding: 0 12px 12px; max-height: 52vh; }
+.cmdbar li { gap: 13px; padding: 12px 14px; font-size: 15px; }
+.cmdbar li .fav { width: 20px; height: 20px; }
+.cmdbar li .glyph { width: 20px; font-size: 15px; }
+.cmdbar li .k { font-size: 12px; }
+.cmd-foot { padding: 11px 22px 12px; font-size: 12.5px; }
+
+/* In the app the page is a separate native view that jumps to its new place at once, so anything that
+   animates the page's area (the sidebar column, the bar's padding) makes the two disagree for a
+   quarter of a second: a dark gap, or a page that tears. Geometry changes are instant there; the
+   fades and slides that do not move the page stay. */
+:root[data-native] .app { transition: none; }
+:root[data-native] .topbar, :root[data-native] .topbar > .nav > #back { transition: none !important; }
+:root[data-native] .cbar { transition: transform var(--motion) var(--ease), opacity var(--motion) var(--ease); }
+
+
+/* ---------- round 9 ---------- */
+/* Hovering Canvas: a blurred, faded wash across the bottom of the sidebar. It covers the spaces row
+   and thins out towards the top; the Canvas button stays above it. */
+#arcPop.side-pop {
+  width: auto; padding: 14px 10px 56px; border-radius: 0; gap: 4px; box-shadow: none; transform-origin: 50% 100%;
+  background: linear-gradient(to top, color-mix(in oklab, var(--glass) 94%, transparent) 38%, color-mix(in oklab, var(--glass) 55%, transparent) 78%, transparent);
+  backdrop-filter: blur(26px) saturate(1.5); -webkit-backdrop-filter: blur(26px) saturate(1.5);
+  -webkit-mask-image: linear-gradient(to top, #000 62%, transparent); mask-image: linear-gradient(to top, #000 62%, transparent);
+  animation: arc-wash .45s var(--ease);
+}
+@keyframes arc-wash { from { opacity: 0; } }
+#canvasBtn { position: relative; z-index: 47; }
+
+/* The spaces row: the pair of icons sits in the middle of the space between Canvas and the + button. */
+.space-dots { gap: 6px; }
+.dot { width: 24px; height: 24px; }

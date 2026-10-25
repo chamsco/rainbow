@@ -49,6 +49,77 @@ fn quiet(b: wry::WebViewBuilder<'_>) -> wry::WebViewBuilder<'_> {
     b
 }
 
+/// Where the surface page lives, next to the chrome's own.
+#[cfg(windows)]
+const SURFACE_URL: &str = "http://pond.localhost/surface.html";
+#[cfg(not(windows))]
+const SURFACE_URL: &str = "pond://localhost/surface.html";
+
+/// Lift a view above its siblings: a child window is drawn in creation order unless told otherwise.
+#[cfg(windows)]
+fn raise(wv: &WebView) {
+    use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE};
+    use wry::WebViewExtWindows;
+    unsafe {
+        let _ = SetWindowPos(wv.hwnd(), Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+#[cfg(not(windows))]
+fn raise(_: &WebView) {}
+
+/// A profile id as a folder name: letters and digits only, so an id from the chrome can never
+/// point outside Wave's own folders.
+fn profile_key(p: &str) -> String {
+    let k: String = p.chars().filter(|c| c.is_ascii_alphanumeric()).take(32).collect();
+    if k.is_empty() { "default".to_string() } else { k }
+}
+
+/// Each profile loads only its own extensions: `extensions/<profile>/<unpacked extension>`.
+fn ext_dir(profile: &str) -> PathBuf {
+    let root = data_root().join("extensions");
+    let dir = root.join(profile);
+    // Before profiles had their own, unpacked extensions sat directly in `extensions/`: those
+    // belong to the default profile.
+    if profile == "default" {
+        if let Ok(rd) = std::fs::read_dir(&root) {
+            for e in rd.flatten() {
+                if e.path().join("manifest.json").exists() {
+                    let _ = std::fs::create_dir_all(&dir);
+                    let _ = std::fs::rename(e.path(), dir.join(e.file_name()));
+                }
+            }
+        }
+    }
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// What the toolbar needs to show an installed extension: its folder, its name and its icon.
+fn ext_info(dir: &std::path::Path) -> Vec<Value> {
+    let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
+    rd.flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| {
+            let folder = e.file_name().to_string_lossy().into_owned();
+            let man: Value = std::fs::read_to_string(e.path().join("manifest.json"))
+                .ok()
+                .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok())
+                .unwrap_or(Value::Null);
+            let name = man["name"].as_str().filter(|n| !n.starts_with("__MSG_")).unwrap_or(&folder).to_string();
+            // The largest PNG icon up to 128px.
+            let icon = man["icons"].as_object().and_then(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| Some((k.parse::<u32>().ok()?, v.as_str()?)))
+                    .filter(|(k, v)| *k <= 128 && v.to_ascii_lowercase().ends_with(".png"))
+                    .max_by_key(|(k, _)| *k)
+                    .and_then(|(_, v)| std::fs::read(e.path().join(v.trim_start_matches('/'))).ok())
+                    .map(|b| format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(b)))
+            });
+            json!({"id": folder, "name": name, "icon": icon})
+        })
+        .collect()
+}
+
 // ponytail: the chrome keeps its first origin and storage key ("pond") on purpose: renaming them
 // would start every install with empty settings, spaces and Canvas.
 #[cfg(windows)]
@@ -98,6 +169,25 @@ addEventListener('pointerdown', function () { window.ipc.postMessage('{"focus":t
 })();
 addEventListener('keydown', function (e) {
   if (e.key === 'Escape') window.ipc.postMessage('{"key":"Escape","shift":false}');
+}, true);
+(function () {
+  // The page's own icon, as it declares it: the chrome shows what the site shows, not a guess.
+  function icon() {
+    var ls = document.querySelectorAll('link[rel~="icon"]');
+    for (var i = 0; i < ls.length; i++) {
+      var u = ls[i].href;
+      if (u && u.length < 20000) { window.ipc.postMessage(JSON.stringify({ icon: u })); return; }
+    }
+  }
+  addEventListener('DOMContentLoaded', icon);
+  addEventListener('load', icon);
+})();
+addEventListener('contextmenu', function (e) {
+  if (!e.shiftKey) return;
+  var a = e.target.closest && e.target.closest('a[href]');
+  if (!a || !/^https?:/i.test(a.href)) return;
+  e.preventDefault(); e.stopPropagation();
+  window.ipc.postMessage(JSON.stringify({ newtab: a.href }));
 }, true);
 addEventListener('click', function (e) {
   if (!e.shiftKey || e.button !== 0) return;
@@ -475,6 +565,9 @@ struct App {
     /// The tabs on screen and where: one, or two side by side in split view. The flag marks
     /// a floating pane (Peek) that stays visible while an overlay is up.
     panes: Vec<(u64, Rect, bool)>,
+    /// The surface view and what it is showing (re-sent once its page has loaded).
+    surface: Option<WebView>,
+    surface_view: String,
     /// One web context per profile, so each keeps its own logins and cookies.
     contexts: HashMap<String, WebContext>,
     /// The tab that should hold keyboard focus.
@@ -679,8 +772,7 @@ impl App {
         let Some(window) = &self.window else { return };
         let (p1, p2, p3, p4) = (self.proxy.clone(), self.proxy.clone(), self.proxy.clone(), self.proxy.clone());
         let (p5, p6) = (self.proxy.clone(), self.proxy.clone());
-        let key: String = profile.chars().filter(|c| c.is_ascii_alphanumeric()).take(32).collect();
-        let key = if key.is_empty() { "default".to_string() } else { key };
+        let key = profile_key(profile);
         let ctx = self
             .contexts
             .entry(key.clone())
@@ -698,6 +790,18 @@ impl App {
                 if let Ok(v) = serde_json::from_str::<Value>(req.body()) {
                     if let Some(s) = v.get("media").and_then(clean_media) {
                         let _ = p1.send_event(UserEvent::ToChrome(json!({"t": "media", "id": id, "s": s})));
+                        return;
+                    }
+                    if let Some(u) = v["icon"].as_str() {
+                        if u.starts_with("https://") || u.starts_with("http://") || u.starts_with("data:image/") {
+                            let _ = p1.send_event(UserEvent::ToChrome(json!({"t": "icon", "id": id, "href": u})));
+                        }
+                        return;
+                    }
+                    if let Some(u) = v["newtab"].as_str() {
+                        if u.starts_with("http://") || u.starts_with("https://") {
+                            let _ = p1.send_event(UserEvent::ToChrome(json!({"t": "newtab", "id": id, "url": u})));
+                        }
                         return;
                     }
                     if let Some(u) = v["peek"].as_str() {
@@ -745,21 +849,88 @@ impl App {
         // Chromium extensions: every unpacked folder inside Wave's extensions folder loads.
         #[cfg(windows)]
         let builder = {
-            let dir = data_root().join("extensions");
-            let _ = std::fs::create_dir_all(&dir);
-            builder.with_browser_extensions_enabled(true).with_extensions_path(dir)
+            builder.with_browser_extensions_enabled(true).with_extensions_path(ext_dir(&key))
         };
         let built = builder.build_as_child(window);
         match built {
             Ok(wv) => {
                 self.placed.remove(&id); // a reused id starts at 0x0 and must be placed again
                 self.tabs.insert(id, wv);
+                if let Some(sf) = &self.surface {
+                    raise(sf);   // a view made later sits above it unless it is lifted again
+                }
             }
             Err(e) => eprintln!("wave: tab {id} failed: {e}"),
         }
     }
 
     /// Place every visible pane and hide the rest. Focus moves only when the active tab changes.
+    /// `{t:'surface', on, x, y, w, h, view}`: show, move or hide the surface. The view is data the
+    /// surface page renders as text, never markup.
+    fn surface(&mut self, m: &Value) {
+        let on = m["on"].as_bool().unwrap_or(false);
+        let n = |k: &str| m[k].as_f64().unwrap_or(0.0);
+        let r = rect(n("x"), n("y"), n("w"), n("h"));
+        if self.surface.is_none() && on {
+            let Some(window) = &self.window else { return };
+            let (ready, act) = (self.proxy.clone(), self.proxy.clone());
+            let built = quiet(WebViewBuilder::new()
+                .with_url(SURFACE_URL)
+                .with_transparent(true)
+                .with_visible(false)
+                .with_bounds(r)
+                .with_custom_protocol("pond".into(), |_, req| match ui_file(req.uri().path()) {
+                    Some((body, mime)) => Response::builder().header("Content-Type", mime).body(body).unwrap(),
+                    None => Response::builder().status(404).body(Cow::Borrowed(&b""[..])).unwrap(),
+                })
+                .with_on_page_load_handler(move |ev, _| {
+                    if matches!(ev, PageLoadEvent::Finished) {
+                        let _ = ready.send_event(UserEvent::Chrome(r#"{"t":"surfaceReady"}"#.to_string()));
+                    }
+                })
+                .with_ipc_handler(move |req| {
+                    // The surface may only say which of its buttons was pressed.
+                    if let Ok(v) = serde_json::from_str::<Value>(req.body()) {
+                        if let Some(a) = v["act"].as_str() {
+                            let a: String = a.chars().take(32).collect();
+                            let _ = act.send_event(UserEvent::ToChrome(json!({"t": "surfaceAct", "act": a})));
+                        }
+                    }
+                }))
+            .build_as_child(window);
+            match built {
+                Ok(wv) => self.surface = Some(wv),
+                Err(e) => eprintln!("wave: surface failed: {e}"),
+            }
+        }
+        if let Some(wv) = &self.surface {
+            if on {
+                self.surface_view = m["view"].to_string();
+                let _ = wv.set_bounds(r);
+                let _ = wv.evaluate_script(&format!("window.surface && surface.set({})", self.surface_view));
+                let _ = wv.set_visible(true);
+                raise(wv);
+                if m["focus"].as_bool() == Some(true) {
+                    let _ = wv.focus();   // a menu takes the keyboard (Escape)
+                }
+            } else {
+                let _ = wv.set_visible(false);
+                self.surface_view.clear();
+                if !self.overlay && !self.asking {
+                    if let Some(tab) = self.active.and_then(|a| self.tabs.get(&a)) {
+                        let _ = tab.focus();
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_surface(&self) {
+        if let (Some(wv), false) = (&self.surface, self.surface_view.is_empty()) {
+            let _ = wv.evaluate_script(&format!("window.surface && surface.set({})", self.surface_view));
+        }
+    }
+
     fn layout(&mut self, panes: Vec<(u64, Rect, bool)>, active: Option<u64>) {
         for (id, _, _) in &self.panes {
             if !panes.iter().any(|(p, _, _)| p == id) {
@@ -1202,21 +1373,21 @@ impl App {
                 self.reclip();
             }
             "extensions" => {
-                let dir = data_root().join("extensions");
-                let _ = std::fs::create_dir_all(&dir);
-                let items: Vec<String> = std::fs::read_dir(&dir)
-                    .map(|rd| rd.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).collect())
-                    .unwrap_or_default();
-                self.to_chrome(&json!({"t": "extensions", "dir": dir.to_string_lossy(), "items": items}));
+                let key = profile_key(m["profile"].as_str().unwrap_or("default"));
+                let dir = ext_dir(&key);
+                self.to_chrome(&json!({"t": "extensions", "profile": key, "dir": dir.to_string_lossy(), "items": ext_info(&dir)}));
             }
             "reveal" => {
                 if m["what"].as_str() == Some("extensions") {
-                    let dir = data_root().join("extensions");
-                    let _ = std::fs::create_dir_all(&dir);
+                    let dir = ext_dir(&profile_key(m["profile"].as_str().unwrap_or("default")));
                     #[cfg(windows)]
                     let _ = std::process::Command::new("explorer").arg(&dir).spawn();
                 }
             }
+            // The surface: a small transparent view above every page, for anything that has to be
+            // seen over a page (a native page covers the chrome). The chrome says where and what.
+            "surface" => self.surface(&m),
+            "surfaceReady" => self.apply_surface(),
             "devtools" => {
                 if let Some(wv) = id.and_then(|i| self.tabs.get(&i)) {
                     wv.open_devtools();
@@ -1659,7 +1830,7 @@ fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale
 #[cfg(windows)]
 fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64) {
     use windows::Win32::Graphics::Gdi::{
-        CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_AND, RGN_DIFF, RGN_OR,
+        CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_DIFF, RGN_OR,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         SetWindowPos, HWND_BOTTOM, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
@@ -1674,16 +1845,19 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
         let Some(px) = width else {
             // No sidebar column, but the compact bar may still need its strip.
             if bar_h > 0.0 {
+                // Everything the pages do not cover (the sidebar when it is always on, the frame around
+                // the page) plus the bar's strip over the page. Clipping to the strip alone made
+                // the always-on sidebar vanish whenever the bar came out.
                 let (holes, _) = overlay_parts(win, panes, 0.0, scale);
                 let rgn = CreateRectRgn(0, 0, w, hgt);
-                let bar = CreateRectRgn(0, 0, bw, (bar_h * scale).round() as i32);
-                CombineRgn(Some(rgn), Some(rgn), Some(bar), RGN_AND);
-                let _ = DeleteObject(bar.into());
                 for (l, t, r, b) in holes {
                     let hole = CreateRectRgn(l, t, r, b);
                     CombineRgn(Some(rgn), Some(rgn), Some(hole), RGN_DIFF);
                     let _ = DeleteObject(hole.into());
                 }
+                let bar = CreateRectRgn(0, 0, bw, (bar_h * scale).round() as i32);
+                CombineRgn(Some(rgn), Some(rgn), Some(bar), RGN_OR);
+                let _ = DeleteObject(bar.into());
                 SetWindowRgn(h, Some(rgn), true);
                 let _ = SetWindowPos(h, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 return;
@@ -1773,6 +1947,8 @@ fn main() {
         chrome: None,
         tabs: HashMap::new(),
         panes: vec![],
+        surface: None,
+        surface_view: String::new(),
         contexts: HashMap::new(),
         active: None,
         radius: 0.0,

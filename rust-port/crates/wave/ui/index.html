@@ -9,7 +9,9 @@
 </head>
 <body>
 <div id="app" class="app">
-  <header class="topbar" id="topbar" data-drag aria-label="Toolbar"></header>
+  <header class="topbar" id="topbar" data-drag aria-label="Toolbar">
+    <div class="tb-right" id="tbRight"><div class="ext-bar" id="extBar" role="toolbar" aria-label="Pinned extensions"></div></div>
+  </header>
 
   <!-- Compact mode: one bar across the top of the window, floating over the page. The
        navigation, address pill and window controls are moved in here, not copied. -->
@@ -32,7 +34,7 @@
         <button class="wc" data-win="max" aria-label="Maximize"></button>
       </div>
       <div class="nav">
-        <button class="icon-btn" id="appMenuBtn" title="Wave menu" aria-label="Wave menu" aria-haspopup="menu"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></svg></button>
+        <button class="icon-btn" id="appMenuBtn" title="Wave menu" aria-label="Wave menu" aria-haspopup="menu"><svg viewBox="0 0 16 16"><path d="M1.5 6.2c1.5-2.2 3-2.2 4.5 0s3 2.2 4.5 0 3-2.2 4.5 0"/><path d="M1.5 10.4c1.5-2.2 3-2.2 4.5 0s3 2.2 4.5 0 3-2.2 4.5 0"/></svg></button>
         <button class="icon-btn" id="toggleSidebar" title="Hide sidebar (Ctrl+S)" aria-label="Hide sidebar"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/></svg></button>
         <button class="icon-btn" id="back" title="Back (Alt+Left)" aria-label="Back"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
         <button class="icon-btn" id="forward" title="Forward (Alt+Right)" aria-label="Forward"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
