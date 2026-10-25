@@ -492,8 +492,51 @@
   $('#cvOut').onclick = () => zoomAt(1 / 1.2);
   $('#cvHome').onclick = () => fit();
 
+  /* Sorting. A small model that runs on this machine decides which topic a captured card belongs to.
+     Until one is installed (set `Wave.localModel = { classify(card) }`) a keyword scorer answers the same
+     call, so nothing else changes the day the model arrives. */
+  const TOPICS = {
+    Code: ['github', 'code', 'api', 'rust', 'python', 'javascript', 'developer', 'function', 'compiler', 'stack', 'bug', 'repo', 'software', 'programming'],
+    Design: ['design', 'figma', 'typography', 'font', 'color', 'ui', 'ux', 'layout', 'brand', 'illustration', 'dribbble'],
+    News: ['news', 'breaking', 'report', 'election', 'government', 'minister', 'court', 'police', 'war', 'times', 'post'],
+    Science: ['science', 'study', 'research', 'physics', 'biology', 'space', 'nasa', 'climate', 'chemistry', 'paper', 'arxiv'],
+    Shopping: ['buy', 'price', 'shop', 'amazon', 'cart', 'deal', 'sale', 'order', 'review', 'best', 'store'],
+    Video: ['youtube', 'video', 'watch', 'film', 'movie', 'trailer', 'stream', 'episode', 'netflix'],
+    Music: ['music', 'song', 'album', 'spotify', 'playlist', 'artist', 'band', 'lyrics', 'concert'],
+    Food: ['recipe', 'food', 'cook', 'restaurant', 'meal', 'kitchen', 'bake', 'dinner'],
+    Travel: ['travel', 'hotel', 'flight', 'trip', 'city', 'guide', 'airbnb', 'visit', 'tour'],
+    Money: ['finance', 'bank', 'invest', 'stock', 'crypto', 'market', 'tax', 'budget', 'bitcoin'],
+    Health: ['health', 'doctor', 'fitness', 'sleep', 'diet', 'medical', 'workout', 'mental'],
+    Reading: ['essay', 'book', 'article', 'blog', 'read', 'story', 'wikipedia', 'novel'],
+  };
+  function scoreTopic(text) {
+    const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    let best = null, top = 0;
+    for (const [topic, keys] of Object.entries(TOPICS)) {
+      const n = words.reduce((c, w) => c + (keys.includes(w) ? 1 : 0), 0);
+      if (n > top) { top = n; best = topic; }
+    }
+    return best;
+  }
+  async function classify({ title = '', text = '', url = '' } = {}) {
+    if (Wave.localModel?.classify) {
+      try { const t = await Wave.localModel.classify({ title, text, url, topics: Object.keys(TOPICS), existing: topics() }); if (t) return String(t); } catch {}
+    }
+    return scoreTopic(`${title} ${text} ${hostOf(url)}`) || (url ? Wave.siteName(url) : 'Saved');
+  }
+  /* Right-click an image, or select text and right-click: it lands on the Canvas, under the topic the
+     classifier picks. */
+  async function capture(c) {
+    const topic = await classify({ title: c.title, text: c.text, url: c.url });
+    const b = c.kind === 'image'
+      ? add({ kind: 'image', image: c.src, title: c.title || 'Image', url: c.url, topic })
+      : add({ kind: 'note', note: String(c.text).slice(0, 600), title: '', source: c.url, topic });
+    toast(`Saved to Canvas · ${topic}`);
+    return b;
+  }
+
   Wave.canvas = {
-    saveTab, saveUrl, addNote, add, remove, connect, touch, fit, flyToCard, openCollection, discover,
+    capture, classify, saveTab, saveUrl, addNote, add, remove, connect, touch, fit, flyToCard, openCollection, discover,
     showTopic: t => { setFilter(t); flyToTopic(t); },
     find: q => S().bookmarks.filter(b => [b.title, b.note, b.url, b.topic].some(x => (x || '').toLowerCase().includes(q.toLowerCase()))),
     show() { countLabel(); draw(); if (!fitted) { fitted = true; fit(); } else apply(); },

@@ -10,7 +10,7 @@
 <body>
 <div id="app" class="app">
   <header class="topbar" id="topbar" data-drag aria-label="Toolbar">
-    <div class="tb-right" id="tbRight"><div class="ext-bar" id="extBar" role="toolbar" aria-label="Pinned extensions"></div></div>
+    <div class="tb-right" id="tbRight"><button class="icon-btn" id="splitBtn" title="Split view" aria-label="Split view" aria-haspopup="menu"></button><div class="ext-bar" id="extBar" role="toolbar" aria-label="Pinned extensions"></div></div>
   </header>
 
   <!-- Compact mode: one bar across the top of the window, floating over the page. The
@@ -100,7 +100,7 @@
 <div class="compact-frame" id="compactFrame" aria-hidden="true"></div>
 
 <!-- Overlays draw over a blurred snapshot of the page (the page itself is a native view). -->
-<div class="veil" id="veil" hidden><img id="veilShot" alt=""></div>
+<div class="veil" id="veil" hidden><img id="veilShot" alt=""><div class="wash" id="wash"></div></div>
 
 <div class="cmdbar" id="cmdbar" role="dialog" aria-label="Command bar" hidden>
   <div class="cmd-chips" id="cmdChips" aria-label="Sites in this space"></div>
@@ -199,5 +199,6 @@
 <script src="jev.js"></script>
 <script src="agent.js"></script>
 <script src="library.js"></script>
+<script src="onboard.js"></script>
 </body>
 </html>

@@ -16,16 +16,16 @@
   button:hover { background: rgba(255,255,255,.24); }
   /* Menus: the same glass as the chrome's own, drawn above the page. */
   .menu { position: absolute; left: 0; top: 0; width: var(--w, 240px); padding: 5px; border-radius: 12px; box-sizing: border-box; isolation: isolate; overflow: hidden;
-    background: rgba(250, 251, 250, .94); color: #10181d; box-shadow: 0 14px 40px rgba(0,0,0,.28), 0 0 0 1px rgba(16,24,29,.1);
+    background: rgba(250, 251, 250, .92); color: #10181d; border: 1px solid rgba(16,24,29,.08); box-shadow: 0 14px 40px rgba(0,0,0,.28), 0 0 0 1px rgba(16,24,29,.1);
     backdrop-filter: blur(30px) saturate(1.5); animation: in .12s cubic-bezier(.2, .8, .2, 1); }
-  .dark .menu { background: rgba(32, 35, 38, .94); color: #eef2f4; box-shadow: 0 14px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.1); }
+  .dark .menu { border-color: rgba(255,255,255,.08); background: rgba(30, 33, 36, .92); color: #eef2f4; box-shadow: 0 14px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.1); }
   /* Frosted glass: a blurred copy of the page behind the menu, then a tint. A transparent view cannot
      blur what lies under it, so the chrome sends a picture of the page and the menu blurs that. */
   .menu.has-glass { background: none; }
   .menu .glass { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; border-radius: inherit; }
-  .menu .glass img { position: absolute; max-width: none; filter: blur(22px) saturate(1.6); }
-  .menu .glass::after { content: ""; position: absolute; inset: 0; background: rgba(250, 251, 250, .7); }
-  .dark .menu .glass::after { background: rgba(24, 27, 30, .74); }
+  .menu .glass img { position: absolute; max-width: none; filter: blur(26px) saturate(1.5); }
+  .menu .glass::after { content: ""; position: absolute; inset: 0; background: rgba(250, 251, 250, .8); }
+  .dark .menu .glass::after { background: rgba(24, 27, 30, .8); }
   .menu.noanim { animation: none; }
   .menu.sub { left: var(--x); top: var(--y); }
   .menu .row { display: flex; align-items: center; gap: 9px; width: 100%; height: 30px; padding: 0 10px; border-radius: 7px; background: none;

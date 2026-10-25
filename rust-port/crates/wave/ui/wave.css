@@ -1109,15 +1109,20 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 
 /* ---------- round 10: split headers, split rows, compact bar, fades ---------- */
 .split-heads { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
-.shead { position: absolute; display: flex; align-items: center; gap: 2px; padding: 0 6px; box-sizing: border-box; pointer-events: auto;
-  color: var(--ink-2); font-size: 12px; border-radius: var(--r-md) var(--r-md) 0 0; }
+/* Arc's split header: no pill, back and forward at one end, the site's name in the middle, a close at the
+   other. Quiet until it is the page you are in. */
+.shead { position: absolute; display: flex; align-items: center; padding: 0 4px; box-sizing: border-box; pointer-events: auto;
+  color: var(--ink-3); font-size: 12px; }
 .shead.on { color: var(--ink); }
-.shead .sh-b { width: 24px; height: 24px; border-radius: var(--r-sm); display: grid; place-items: center; flex: none; }
-.shead .sh-b:hover { background: var(--hover); }
+.shead .sh-l, .shead .sh-r { display: flex; align-items: center; gap: 0; flex: 0 0 56px; }
+.shead .sh-r { justify-content: flex-end; }
+.shead .sh-b { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; flex: none; opacity: .75; }
+.shead .sh-b:hover { background: var(--hover); opacity: 1; }
 .shead .sh-b svg { width: 14px; height: 14px; }
-.shead .sh-url { flex: 1; min-width: 0; margin: 0 6px; padding: 3px 9px; border-radius: var(--r-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  background: color-mix(in oklab, var(--ink) 7%, transparent); }
-.shead.on .sh-url { background: color-mix(in oklab, var(--ink) 11%, transparent); }
+.shead .sh-url { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; font-weight: 500; letter-spacing: .01em; }
+.shead .sh-ico { display: grid; place-items: center; opacity: .6; }
+.shead .sh-ico svg { width: 12px; height: 12px; }
 .app .page-card.split { background: transparent; box-shadow: none; overflow: visible; }
 
 .tab.split-row { padding: 0 4px 0 0; gap: 0; }
@@ -1152,3 +1157,51 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .nsp-list button.on::after { content: "\2713"; margin-left: auto; opacity: .7; }
 .nsp-list input { width: 100%; height: 32px; border: 0; outline: 0; border-radius: var(--r-sm); padding: 0 9px; font-size: 12.5px; color: var(--ink); background: color-mix(in oklab, var(--ink) 9%, transparent); }
 .nsp { background: linear-gradient(150deg, color-mix(in oklab, var(--a) 88%, #12222b), color-mix(in oklab, var(--b) 88%, #12222b) 55%, color-mix(in oklab, var(--c) 88%, #12222b)); }
+
+/* The address bar adapts: when the sidebar is wide the address slides right and narrows, down to a
+   floor, rather than the sidebar stopping at it. */
+:root[data-os="windows"][data-layout="sidebar"] .topbar, :root[data-os="windows"][data-layout="rail"] .topbar {
+  grid-template-columns: minmax(calc(var(--side-cur) + 110px), 1fr) minmax(150px, 620px) minmax(130px, 1fr);
+}
+:root[data-os="windows"][data-layout="sidebar"][data-side="right"] .topbar { grid-template-columns: minmax(130px, 1fr) minmax(150px, 620px) minmax(calc(var(--side-cur) + 110px), 1fr); }
+#splitBtn.on { background: var(--active); color: var(--ink); }
+#splitBtn svg { width: 16px; height: 16px; }
+
+/* Search / new tab: 35% smaller than the roomy version, close to the reference. */
+.cmdbar { width: min(572px, calc(100vw - 32px)); top: 14vh; }
+.cmd-chips { gap: 6px; padding: 10px 12px 0; }
+.cmd-chip { width: 42px; height: 32px; }
+.cmd-chip .fav { width: 18px; height: 18px; border-radius: 5px; }
+.cmd-chip svg { width: 13px; height: 13px; }
+.cmd-input { gap: 8px; padding: 9px 16px 10px; }
+.cmd-input input { font-size: 15px; padding: 2px 0; }
+.cmd-scope { font-size: 12px; padding: 4px 9px 4px 6px; gap: 5px; }
+.cmd-scope .fav { width: 14px; height: 14px; }
+.cmdbar ul { padding: 0 8px 8px; max-height: 46vh; }
+.cmdbar li { gap: 10px; padding: 7px 10px; font-size: 13px; }
+.cmdbar li .fav { width: 16px; height: 16px; }
+.cmdbar li .glyph { width: 16px; font-size: 13px; }
+.cmdbar li .k { font-size: 10.5px; }
+.cmd-foot { padding: 7px 16px 8px; font-size: 11px; }
+
+/* Ask Wave's wash: sharp page below, blurred page above it fading in towards the bottom, never a second
+   section of the window. */
+.veil.low { left: 0; right: 0; bottom: auto; background: none; overflow: hidden; -webkit-mask-image: none; mask-image: none; animation: none; }
+.veil.low::after { display: none; }
+.veil.low .wash { position: absolute; inset: 0; }
+.veil.low .wash img { position: absolute; max-width: none; border-radius: 0; transform: none; opacity: 1; object-fit: fill; }
+.veil.low .wash img.soft { filter: blur(26px) saturate(1.35); transform: scale(1.02); opacity: 1;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 4%, rgba(0,0,0,.35) 30%, #000 82%); mask-image: linear-gradient(to bottom, transparent 4%, rgba(0,0,0,.35) 30%, #000 82%);
+  animation: wash-in .6s var(--ease); }
+.veil.low .wash .tint { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to bottom, transparent 26%, color-mix(in oklab, var(--glass) 40%, transparent) 62%, color-mix(in oklab, var(--glass) 72%, transparent)); animation: wash-in .6s var(--ease); }
+@keyframes wash-in { from { opacity: 0; } }
+.veil.low.out { opacity: 1; transition: none; }
+.veil.low.out .wash img.soft, .veil.low.out .wash .tint { opacity: 0; transition: opacity .32s var(--ease); animation: none; }
+.veil:not(.low) .wash { display: none; }
+.veil.low .wash img.sharp { filter: none; }
+
+/* The welcome: water that clears into the app. */
+.onboard { position: fixed; inset: 0; z-index: 95; background: #0e1a22; display: grid; place-items: center; }
+.onboard canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ob-word { position: relative; font: 600 clamp(48px, 9vw, 104px)/1 var(--serif, Georgia, serif); color: #eaf5f8; opacity: 0; text-shadow: 0 6px 40px rgba(0,0,0,.35); }

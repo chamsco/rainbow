@@ -183,6 +183,19 @@ addEventListener('keydown', function (e) {
   addEventListener('load', icon);
 })();
 addEventListener('contextmenu', function (e) {
+  // A right-click on an image or a selection offers Save to Canvas; the page says what and where.
+  if (e.shiftKey || e.defaultPrevented) return;
+  var sel = String(getSelection() || '').trim();
+  var img = e.target.closest && e.target.closest('img');
+  var c = null;
+  if (img && /^https?:/i.test(img.currentSrc || img.src)) c = { kind: 'image', src: img.currentSrc || img.src };
+  else if (sel.length > 1) c = { kind: 'text', text: sel.slice(0, 4000) };
+  if (!c) return;
+  e.preventDefault();
+  c.x = e.clientX; c.y = e.clientY; c.title = String(document.title).slice(0, 200); c.url = String(location.href).slice(0, 2048);
+  window.ipc.postMessage(JSON.stringify({ ctx: c }));
+}, true);
+addEventListener('contextmenu', function (e) {
   if (!e.shiftKey) return;
   var a = e.target.closest && e.target.closest('a[href]');
   if (!a || !/^https?:/i.test(a.href)) return;
@@ -589,6 +602,10 @@ struct App {
     /// The bar's width in logical px, or 0 for the whole window. The strip is only as wide as
     /// the bar: while the bar rides the peeked sidebar it must not cover the page beside it.
     chrome_bar_w: f64,
+    /// A strip of chrome drawn over the live page (Ask Wave's wash): (top, height) in logical px.
+    chrome_band: Option<(f64, f64)>,
+    /// The peeked sidebar is on the right of the window (tabs on the right).
+    chrome_right: bool,
     /// Whether the chrome is currently clipped and raised (kept so the normal path does no work).
     clipped: bool,
     /// The size the chrome webview was last given, in logical px. A window created before a
@@ -790,6 +807,19 @@ impl App {
                 if let Ok(v) = serde_json::from_str::<Value>(req.body()) {
                     if let Some(s) = v.get("media").and_then(clean_media) {
                         let _ = p1.send_event(UserEvent::ToChrome(json!({"t": "media", "id": id, "s": s})));
+                        return;
+                    }
+                    if let Some(c) = v["ctx"].as_object() {
+                        // What a right-click can ask for is small and checked here, not trusted.
+                        let s = |k: &str, n: usize| c.get(k).and_then(|x| x.as_str()).map(|x| x.chars().take(n).collect::<String>());
+                        let n = |k: &str| c.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0).clamp(0.0, 20000.0);
+                        let kind = s("kind", 8).unwrap_or_default();
+                        let src = s("src", 2048);
+                        let ok = (kind == "text" && s("text", 4000).is_some()) || (kind == "image" && src.as_deref().is_some_and(|u| u.starts_with("http://") || u.starts_with("https://")));
+                        if ok {
+                            let _ = p1.send_event(UserEvent::ToChrome(json!({"t": "ctx", "id": id, "ctx": {
+                                "kind": kind, "src": src, "text": s("text", 4000), "title": s("title", 200), "url": s("url", 2048), "x": n("x"), "y": n("y") }})));
+                        }
                         return;
                     }
                     if let Some(u) = v["icon"].as_str() {
@@ -1010,7 +1040,9 @@ impl App {
         // The compact bar is its own strip across the top: it clips even when the sidebar
         // column is not out, because the page would otherwise cover it.
         self.chrome_bar_h = self.chrome_bar.filter(|_| !self.overlay && !self.asking).unwrap_or(0.0);
-        if self.chrome_bar_h > 0.0 && want.is_none() {
+        // Ask Wave's wash is a band of chrome over the live page; it is on while the question is asked.
+        let band = self.chrome_band.filter(|_| !self.overlay);
+        if (self.chrome_bar_h > 0.0 || band.is_some()) && want.is_none() {
             want = Some(0.0);
         }
         // A minimized or not-yet-shown window has no area to clip to, and clipping there
@@ -1030,7 +1062,7 @@ impl App {
         self.clipped = want.is_some();
         let Some(c) = &self.chrome else { return };
         let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor());
-        chrome_over(c, want, scale, win, &self.panes, self.chrome_bar_h, self.chrome_bar_w);
+        chrome_over(c, want, scale, win, &self.panes, self.chrome_bar_h, self.chrome_bar_w, band, self.chrome_right);
     }
 
     /// Rebuild the exact corner regions once the window has stopped moving.
@@ -1358,7 +1390,19 @@ impl App {
             // The sidebar floats over the page: a page is a child window *above* the chrome,
             // so the chrome is clipped to the sidebar column and raised while it is showing.
             "chrome" => {
+                // A message about the band alone leaves the sidebar and bar settings as they are.
+                if let Some(b) = m.get("band") {
+                    self.chrome_band = match (b["y"].as_f64(), b["h"].as_f64()) {
+                        (Some(y), Some(h)) if h > 0.0 => Some((y.max(0.0), h)),
+                        _ => None,
+                    };
+                    if m.get("over").is_none() && m.get("bar").is_none() {
+                        self.reclip();
+                        return;
+                    }
+                }
                 if let Some(over) = m.get("over") {
+                    self.chrome_right = over["right"].as_bool().unwrap_or(false);
                     self.chrome_over = if over["on"].as_bool().unwrap_or(false) {
                         Some(over["w"].as_f64().unwrap_or(248.0).clamp(44.0, 600.0))
                     } else {
@@ -1809,7 +1853,7 @@ fn round(_: &WebView, _: wry::dpi::PhysicalSize<f64>, _: f64) {}
 
 /// The rectangles the overlay clip is cut around, in physical px: every pane (the page keeps
 /// its own pixels there) and the sidebar column (the chrome paints over the page there).
-fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale: f64) -> (Vec<(i32, i32, i32, i32)>, (i32, i32, i32, i32)) {
+fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale: f64, right: bool) -> (Vec<(i32, i32, i32, i32)>, (i32, i32, i32, i32)) {
     let holes = panes
         .iter()
         .map(|(_, r, _)| {
@@ -1818,7 +1862,8 @@ fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale
             (p.x, p.y, p.x + s.width, p.y + s.height)
         })
         .collect();
-    let col = (0, 0, (col_w * scale).round().max(1.0) as i32, win.1.max(1));
+    let cw = (col_w * scale).round().max(1.0) as i32;
+    let col = if right { ((win.0 - cw).max(0), 0, win.0.max(1), win.1.max(1)) } else { (0, 0, cw, win.1.max(1)) };
     (holes, col)
 }
 
@@ -1828,7 +1873,7 @@ fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale
 /// not painted and does not take clicks, so the page stays live underneath and the page never
 /// has to be resized. `width: None` puts the chrome back behind the pages.
 #[cfg(windows)]
-fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64) {
+fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64, band: Option<(f64, f64)>, right: bool) {
     use windows::Win32::Graphics::Gdi::{
         CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_DIFF, RGN_OR,
     };
@@ -1844,20 +1889,27 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
     unsafe {
         let Some(px) = width else {
             // No sidebar column, but the compact bar may still need its strip.
-            if bar_h > 0.0 {
+            if bar_h > 0.0 || band.is_some() {
                 // Everything the pages do not cover (the sidebar when it is always on, the frame around
                 // the page) plus the bar's strip over the page. Clipping to the strip alone made
                 // the always-on sidebar vanish whenever the bar came out.
-                let (holes, _) = overlay_parts(win, panes, 0.0, scale);
+                let (holes, _) = overlay_parts(win, panes, 0.0, scale, right);
                 let rgn = CreateRectRgn(0, 0, w, hgt);
                 for (l, t, r, b) in holes {
                     let hole = CreateRectRgn(l, t, r, b);
                     CombineRgn(Some(rgn), Some(rgn), Some(hole), RGN_DIFF);
                     let _ = DeleteObject(hole.into());
                 }
-                let bar = CreateRectRgn(0, 0, bw, (bar_h * scale).round() as i32);
-                CombineRgn(Some(rgn), Some(rgn), Some(bar), RGN_OR);
-                let _ = DeleteObject(bar.into());
+                if bar_h > 0.0 {
+                    let bar = CreateRectRgn(0, 0, bw, (bar_h * scale).round() as i32);
+                    CombineRgn(Some(rgn), Some(rgn), Some(bar), RGN_OR);
+                    let _ = DeleteObject(bar.into());
+                }
+                if let Some((y, bh)) = band {
+                    let b = CreateRectRgn(0, (y * scale).round() as i32, w, ((y + bh) * scale).round() as i32);
+                    CombineRgn(Some(rgn), Some(rgn), Some(b), RGN_OR);
+                    let _ = DeleteObject(b.into());
+                }
                 SetWindowRgn(h, Some(rgn), true);
                 let _ = SetWindowPos(h, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 return;
@@ -1866,7 +1918,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
             let _ = SetWindowPos(h, Some(HWND_BOTTOM), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             return;
         };
-        let (holes, col) = overlay_parts(win, panes, px, scale);
+        let (holes, col) = overlay_parts(win, panes, px, scale, right);
         // The whole window, minus every pane (so the page keeps its own pixels, and the 8 px
         // margins, the toolbar strip and the split gap keep the chrome's)...
         let rgn = CreateRectRgn(0, 0, w, hgt);
@@ -1879,6 +1931,12 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
         let column = CreateRectRgn(col.0, col.1, col.2, col.3);
         CombineRgn(Some(rgn), Some(rgn), Some(column), RGN_OR);
         let _ = DeleteObject(column.into());
+        // ...plus Ask Wave's band, which is drawn over the live page.
+        if let Some((y, bh)) = band {
+            let b = CreateRectRgn(0, (y * scale).round() as i32, w, ((y + bh) * scale).round() as i32);
+            CombineRgn(Some(rgn), Some(rgn), Some(b), RGN_OR);
+            let _ = DeleteObject(b.into());
+        }
         // ...plus the compact bar's strip, for the same reason.
         if bar_h > 0.0 {
             let bar = CreateRectRgn(0, 0, bw, (bar_h * scale).round() as i32);
@@ -1893,7 +1951,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
 // ponytail: on macOS the page webview is an NSView above the chrome's, so the same clip needs
 // `addSubview:positioned:`. The CSS overlay still works there, the page just covers it.
 #[cfg(not(windows))]
-fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64) {}
+fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: Option<(f64, f64)>, _: bool) {}
 
 /// Start Windows voice typing (Win+H) into whatever has focus: Ask Wave's input.
 #[cfg(windows)]
@@ -1958,6 +2016,8 @@ fn main() {
         chrome_bar: None,
         chrome_bar_h: 0.0,
         chrome_bar_w: 0.0,
+        chrome_band: None,
+        chrome_right: false,
         clipped: false,
         chrome_size: None,
         chrome_shown: false,
@@ -1987,7 +2047,7 @@ mod tests {
     #[test]
     fn overlay_cuts_the_page_and_keeps_the_sidebar() {
         let panes = [(1u64, rect(8.0, 8.0, 1384.0, 884.0), false)];
-        let (holes, col) = overlay_parts((1400, 900), &panes, 248.0, 1.0);
+        let (holes, col) = overlay_parts((1400, 900), &panes, 248.0, 1.0, false);
         assert_eq!(holes, vec![(8, 8, 1392, 892)]);
         assert_eq!(col, (0, 0, 248, 900));
         // The column starts at the window edge and reaches the bottom, whatever the pane does.
@@ -1999,7 +2059,7 @@ mod tests {
     #[test]
     fn overlay_scales_with_the_window() {
         let panes = [(1u64, rect(8.0, 8.0, 1384.0, 884.0), false)];
-        let (holes, col) = overlay_parts((2800, 1800), &panes, 248.0, 2.0);
+        let (holes, col) = overlay_parts((2800, 1800), &panes, 248.0, 2.0, false);
         assert_eq!(holes, vec![(16, 16, 2784, 1784)]);
         assert_eq!(col.2, 496);
         assert_eq!(col.3, 1800);
@@ -2013,7 +2073,7 @@ mod tests {
             (1u64, rect(8.0, 8.0, 688.0, 884.0), false),
             (2u64, rect(704.0, 8.0, 688.0, 884.0), false),
         ];
-        let (holes, _) = overlay_parts((1400, 900), &panes, 248.0, 1.0);
+        let (holes, _) = overlay_parts((1400, 900), &panes, 248.0, 1.0, false);
         assert_eq!(holes.len(), 2);
         assert!(holes[0].2 < holes[1].0, "the 8 px gap is not part of either hole");
     }
@@ -2022,7 +2082,7 @@ mod tests {
     /// paints the whole window behind it.
     #[test]
     fn overlay_without_panes_is_the_whole_window_plus_the_column() {
-        let (holes, col) = overlay_parts((1400, 900), &[], 248.0, 1.0);
+        let (holes, col) = overlay_parts((1400, 900), &[], 248.0, 1.0, false);
         assert!(holes.is_empty());
         assert_eq!(col, (0, 0, 248, 900));
     }

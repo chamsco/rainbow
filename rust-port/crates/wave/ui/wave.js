@@ -85,7 +85,7 @@ function seed() {
     space('Work', '💼', PALETTES[2], ['https://github.com/']),
   ];
   return {
-    v: 1, spaces, activeSpace: spaces[0].id, tabs: tabsSeed,
+    v: 1, onboard: 'pending', spaces, activeSpace: spaces[0].id, tabs: tabsSeed,
     essentials: [
       { id: uid(), url: 'https://mail.google.com/', title: 'Mail' },
       { id: uid(), url: 'https://calendar.google.com/', title: 'Calendar' },
@@ -346,6 +346,7 @@ function recv(m) {
       }
       break;
     }
+    case 'ctx': pageContextMenu(m); break;
     case 'newtab': openTab(m.url, { focus: false }); surfaceToast('Opened in a new tab'); break;
     case 'key': onKey({ key: m.key, ctrlKey: true, shiftKey: m.shift, altKey: false, metaKey: false, preventDefault() {} }); break;
     case 'snapshot': { const r = shots.get(m.id); shots.delete(m.id); r?.(m.data); break; }
@@ -391,6 +392,21 @@ function syncPage() {
   // no frames at all, and then the shell would never learn where the panes are — the page
   // area stays black and the shell's "chrome never spoke" reload fires for nothing.
   setTimeout(run, 60);
+}
+/* A right-click on an image or a selection inside a page: Save to Canvas and the few things that go with it. */
+function pageContextMenu(m) {
+  const c = m.ctx, p = panes.find(q => q.id === m.id);
+  if (!c || !p) return;
+  const items = c.kind === 'image' ? [
+    ['Save image to Canvas', () => Wave.canvas?.capture(c)],
+    ['Open image in new tab', () => openTab(c.src)],
+    ['Copy image address', () => copyText(c.src, 'Address copied')],
+  ] : [
+    ['Save to Canvas', () => Wave.canvas?.capture(c)],
+    ['Copy', () => copyText(c.text, 'Copied')],
+    [`Search the web for “${c.text.slice(0, 22)}${c.text.length > 22 ? '…' : ''}”`, () => openTab(SEARCH[state.settings.search] + encodeURIComponent(c.text.slice(0, 200)))],
+  ];
+  menu(p.x + (+c.x || 0), p.y + (+c.y || 0), items);
 }
 function doSync() {
   alignNav();
@@ -495,12 +511,16 @@ function drawSplitHeads(heads, origin) {
       const t = tab(hd.id);
       const go = js => e => { e.stopPropagation(); send({ t: 'exec', id: hd.id, js }); };
       const btn = (cls, title, svg, fn) => h('button', { class: cls, title, 'aria-label': title, onclick: fn, innerHTML: svg });
+      let host = '';
+      try { host = new URL(t?.url).hostname.replace(/^www\./, ''); } catch { host = t?.url || ''; }
       return h('div', { class: 'shead' + (shownTab === hd.id ? ' on' : ''), dataset: { id: hd.id }, onpointerdown: () => focusPane(hd.id) },
-        btn('sh-b', 'Back', '<svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg>', go('history.back()')),
-        btn('sh-b', 'Forward', '<svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg>', go('history.forward()')),
-        btn('sh-b', 'Reload', '<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/></svg>', go('location.reload()')),
-        h('span', { class: 'sh-url', title: t?.url || '' }, (t?.url || '').replace(/^https?:\/\//, '').replace(/\/$/, '')),
-        btn('sh-b sh-x', 'Close split view', '<svg viewBox="0 0 16 16"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>', e => { e.stopPropagation(); unsplit(); }));
+        h('span', { class: 'sh-l' },
+          btn('sh-b', 'Back', '<svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg>', go('history.back()')),
+          btn('sh-b', 'Forward', '<svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg>', go('history.forward()'))),
+        h('span', { class: 'sh-url', title: t?.url || '' },
+          h('span', { class: 'sh-ico', innerHTML: '<svg viewBox="0 0 16 16"><path d="M6.7 9.3a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-.8.8"/><path d="M9.3 6.7a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l.8-.8"/></svg>' }), host),
+        h('span', { class: 'sh-r', },
+          btn('sh-b sh-x', 'Close split view', '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="m6 6 4 4M10 6l-4 4"/></svg>', e => { e.stopPropagation(); unsplit(); })));
     }));
   }
   heads.forEach((hd, i) => {
@@ -957,15 +977,15 @@ function lum(hex) {
   return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
 }
 /* Sidebar and Top Toolbar moves the navigation and address pill into a bar across the window. */
-let toolbarOn = false, compactOn = false, capOn = false;
+let toolbarOn = false, compactOn = false, capOn = false, sideOn = '';
 function placeChrome() {
   const st = state.settings;
   const on = st.layout === 'toolbar', comp = st.layout === 'compact';
   // Windows puts the caption buttons at the window's top right, over the page column, the way
   // every Windows browser does; the sidebar keeps the whole left edge to itself.
   const cap = root.dataset.os === 'windows' && (st.layout === 'sidebar' || st.layout === 'rail');
-  if (on === toolbarOn && comp === compactOn && cap === capOn) return;
-  toolbarOn = on; compactOn = comp; capOn = cap;
+  if (on === toolbarOn && comp === compactOn && cap === capOn && st.side === sideOn) return;
+  toolbarOn = on; compactOn = comp; capOn = cap; sideOn = st.side;
   const win = root.dataset.os === 'windows', right = $('#tbRight');
   // The Wave menu button rides in the compact bar's slot; every other layout keeps it first in the nav.
   if (!comp) $('.nav').prepend($('#appMenuBtn'));
@@ -974,6 +994,7 @@ function placeChrome() {
     $('#cbMid').append($('#urlPill'));
     $('#cbApp').append($('#appMenuBtn'));
     // Pinned extensions, then the window buttons, at the right end (the left on macOS).
+    $('.cb-right').prepend($('#splitBtn'));
     if (win) { $('#cbNewTab').after($('#extBar')); $('.cb-right').append($('#winControls')); }
     else { $('#cbWin').append($('#winControls')); right.prepend($('#extBar')); }
   } else if (on || cap) {
@@ -981,6 +1002,10 @@ function placeChrome() {
     // extensions and the window buttons. (On Windows this is every layout but compact.)
     $('#topbar').append($('.nav'), $('#urlPill'), right);
     right.append($('#extBar'), $('#winControls'));
+    // The sidebar button sits on the sidebar's side of the bar and the split button opposite: with
+    // tabs on the right they trade places.
+    if (st.side === 'right') { right.insertBefore($('#toggleSidebar'), $('#winControls')); $('#appMenuBtn').after($('#splitBtn')); }
+    else { $('#back').before($('#toggleSidebar')); right.prepend($('#splitBtn')); }
   } else {
     $('.side-top').append($('#winControls'), $('.nav'));
     right.prepend($('#extBar'));
@@ -1057,22 +1082,13 @@ function compactItems() {
     ['Hide sidebar', () => pick('sidebar'), mode() === 'sidebar' ? 'check' : ''],
     ['Hide toolbar', () => pick('toolbar'), mode() === 'toolbar' ? 'check' : ''],
     ['Hide both', () => pick('both'), mode() === 'both' ? 'check' : ''],
-    '-',
-    ['Compact Mode', [
-      ['New Folder', newFolder],
-      ['Live Folder', [['New Live Folder…', () => newFolder()], ['What is a Live Folder?', () => toast('A folder that fills itself from the sites you visit most')]]],
-      '-',
-      [`Tabs on the ${st.side === 'right' ? 'left' : 'right'}`, () => { st.side = st.side === 'right' ? 'left' : 'right'; applyTheme(); save(); syncPage(); }],
-      ['Edit Theme…', () => openSpaceSettings()],
-      ['Customize Toolbar…', () => openSettings('look')],
-    ], 'sub'],
   ];
 }
-function compactMenu(x, y) { menu(x, y, compactItems()); }
+function compactMenu(x, y) { frameMenu(x, y); }
 /* With the top bar across the window, the navigation sits beside the sidebar's edge and the address in
    the middle: the sidebar may not grow past the room between them. */
 const spansBar = () => (root.dataset.os === 'windows' && (state.settings.layout === 'sidebar' || state.settings.layout === 'rail')) || state.settings.layout === 'toolbar';
-const sideCap = () => spansBar() ? Math.max(150, Math.round(innerWidth / 2 - 420)) : 420;
+const sideCap = () => 420;
 function fitSide() {
   const st = state.settings;
   root.style.setProperty('--side-w', (st.layout === 'rail' ? 58 : Math.min(st.sideWidth, sideCap())) + 'px');
@@ -1334,6 +1350,7 @@ function render() {
     oncontextmenu: e => { e.preventDefault(); spaceMenu(x, e.clientX, e.clientY); },
   }, x.id === s.id ? x.icon : h('i'))));
   $('#canvasBtn').classList.toggle('on', view === 'canvas');
+  $('#splitBtn').classList.toggle('on', !!s.split);
   sideButtons();
 }
 
@@ -1606,10 +1623,7 @@ function frameMenu(x, y) {
     '-',
     ...compactItems(),
     '-',
-    [`Tabs on the ${st.side === 'right' ? 'left' : 'right'}`, () => {
-      st.side = st.side === 'right' ? 'left' : 'right'; applyTheme(); save(); syncPage();
-    }],
-    '-',
+    ['Tabs on the right', () => { st.side = st.side === 'right' ? 'left' : 'right'; applyTheme(); save(); syncPage(); }, st.side === 'right' ? 'check' : ''],
     ['Edit theme…', () => openSpaceSettings()],
     ['Customize toolbar…', () => openSettings('look')],
     '-',
@@ -1908,29 +1922,52 @@ async function veilOn(mode = 'full') {
   if (overlayDepth++) return;
   veilMode = mode;
   const veil = $('#veil'), img = $('#veilShot');
-  const band = mode === 'low' ? Math.max(innerHeight * .25, 220) : innerHeight;
-  Object.assign(veil.style, { top: innerHeight - band + 'px', height: band + 'px' });
   veil.classList.toggle('low', mode === 'low');
+  if (mode === 'low') return washOn(veil);
+  Object.assign(veil.style, { top: '0px', height: innerHeight + 'px' });
   img.hidden = true;
   const p = panes[0];
   if (NATIVE && p) {
     const data = await snapshot(p.id);
-    if (data) { img.src = data; Object.assign(img.style, { left: p.x + 'px', top: p.y - (innerHeight - band) + 'px', width: p.w + 'px', height: p.h + 'px' }); img.hidden = false; }
+    if (data) { img.src = data; Object.assign(img.style, { left: p.x + 'px', top: p.y + 'px', width: p.w + 'px', height: p.h + 'px' }); img.hidden = false; }
   }
   veil.hidden = false;
-  if (mode === 'low') { crop = Math.max(0, band - (innerHeight - $('#pageCard').getBoundingClientRect().bottom)); syncPage(); send({ t: 'overlay', on: true, low: true }); }
-  else send({ t: 'overlay', on: true });
+  send({ t: 'overlay', on: true });
+}
+/* Ask Wave's wash. The page stays live and keeps its size. The chrome is lifted over a band along the
+   bottom of the window, and there it draws a sharp picture of the page (so the seam cannot be seen)
+   with a blurred copy fading in over it, thicker towards the bottom. */
+async function washOn(veil) {
+  const band = Math.round(Math.max(innerHeight * .42, 300)), top = innerHeight - band;
+  Object.assign(veil.style, { top: top + 'px', height: band + 'px' });
+  const wash = $('#wash');
+  wash.replaceChildren();
+  $('#veilShot').hidden = true;
+  if (NATIVE) {
+    const shots = await Promise.all(panes.map(async p => [p, await snapshot(p.id)]));
+    for (const cls of ['sharp', 'soft']) for (const [p, data] of shots) if (data) {
+      wash.append(h('img', { class: cls, alt: '', src: data, style: `left:${p.x}px;top:${p.y - top}px;width:${p.w}px;height:${p.h}px` }));
+    }
+  }
+  wash.append(h('div', { class: 'tint' }));
+  veil.hidden = false;
+  send({ t: 'chrome', band: { y: top, h: band } });
+  send({ t: 'overlay', on: true, low: true });
 }
 function veilOff() {
   if (--overlayDepth > 0) return;
   overlayDepth = 0;
   const v = $('#veil');
-  if (veilMode === 'low' && !v.hidden) {
-    // Ask Wave's band fades away with the chat, then the page gets its height back.
+  if (veilMode === 'low') {
+    // The wash dissolves with the chat; only then does the shell stop drawing the band.
+    send({ t: 'overlay', on: false, low: true });
+    if (v.hidden) { send({ t: 'chrome', band: null }); return; }
     v.classList.add('out');
-    veilHide = setTimeout(() => { v.hidden = true; v.classList.remove('out'); }, 300);
-  } else v.hidden = true;
-  if (veilMode === 'low') { crop = 0; syncPage(); send({ t: 'overlay', on: false, low: true }); } else send({ t: 'overlay', on: false });
+    veilHide = setTimeout(() => { v.hidden = true; v.classList.remove('out'); $('#wash').replaceChildren(); send({ t: 'chrome', band: null }); }, 340);
+    return;
+  }
+  v.hidden = true;
+  send({ t: 'overlay', on: false });
 }
 
 function panel(title, build) {
@@ -2073,7 +2110,8 @@ function openSettings(section = 'look') {
       h('div', { class: 'row-btns', style: 'justify-content:flex-start' },
         h('button', { class: 'btn', onclick: exportData }, 'Export…'),
         h('button', { class: 'btn', onclick: importData }, 'Import…'),
-        h('button', { class: 'btn', onclick: () => openArchive() }, 'Archive')),
+        h('button', { class: 'btn', onclick: () => openArchive() }, 'Archive'),
+        h('button', { class: 'btn', onclick: () => { closePanel(); setTimeout(() => Wave.onboard?.(), 200); } }, 'Replay welcome')),
     ],
   };
   function draw() {
@@ -2223,6 +2261,7 @@ function renderChips() {
     h('button', { type: 'button', class: 'cmd-scope-x', title: 'Search everything (Delete)', 'aria-label': 'Remove the site filter',
       onpointerdown: e => { e.preventDefault(); clearCmdScope(); } },
       h('span', { innerHTML: '<svg viewBox="0 0 16 16"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>' })));
+  $('#cmdInput').placeholder = cmdScope ? `Search ${siteName(cmdScope)}` : 'Search tabs, bookmarks, history or the web';
   $('#cmdFoot').textContent = cmdScope
     ? `Searching ${siteName(cmdScope)} · Delete for everything · Tab for the next site · Esc to close`
     : 'Tab to scope to a site · ↵ to open · Esc to close';
@@ -2244,6 +2283,24 @@ function openCmd(mode = 'new') {
 }
 let cmdRunning = false;
 function closeCmd() { if (!cmdRunning) pendingSplit = null; if (!$('#cmdbar').hidden) { $('#cmdbar').hidden = true; cmdScope = null; veilOff(); closePeekIfIdle(); } }
+/* Typing the start of a site's name offers to search that site: "redd" gives "Search Reddit", and Tab
+   moves into it. The names come from the sites you know: built in, Essentials, open tabs and history. */
+function siteHint(q) {
+  if (!q || q.length < 2 || /\s/.test(q)) return null;
+  const known = new Map();
+  for (const [host, name] of Object.entries(SITE_NAMES)) known.set(host, name);
+  for (const e of state.essentials) known.set(hostOf(e.url), siteName(e.url));
+  for (const t of Object.values(state.tabs)) known.set(hostOf(t.url), siteName(t.url));
+  for (const x of state.history.slice(0, 300)) known.set(hostOf(x.url), siteName(x.url));
+  for (const [host, name] of known) if (host && name.toLowerCase().startsWith(q)) return { host, name };
+  for (const [host, name] of known) if (host && host.replace(/^(www|mail|news|en|m)\./, '').startsWith(q)) return { host, name };
+  return null;
+}
+function scopeTo(host) {
+  cmdScope = host;
+  $('#cmdInput').value = '';
+  renderChips(); cmdUpdate(); $('#cmdInput').focus();
+}
 function cmdUpdate() {
   const raw = $('#cmdInput').value;
   const q = raw.trim().toLowerCase();
@@ -2252,6 +2309,9 @@ function cmdUpdate() {
   const match = (...xs) => q.split(/\s+/).every(w => xs.some(x => (x || '').toLowerCase().includes(w)));
   const scope = cmdScope;
   const inScope = u => !scope || hostOf(u) === scope;
+  const hint = !scope && q ? siteHint(q) : null;
+  if (hint) items.push({ kind: 'sitehint', fav: 'https://' + hint.host, label: `Search ${hint.name}`, meta: 'Press Tab', keep: true, run: () => scopeTo(hint.host) });
+  if (scope && !q) items.push({ kind: 'open', fav: 'https://' + scope, label: `Open ${siteName(scope)}`, meta: 'Open', run: () => openTab('https://' + scope) });
   if (q) {
     const url = scope
       ? SEARCH[state.settings.search] + encodeURIComponent(`${text} site:${scope}`)
@@ -2295,7 +2355,7 @@ function cmdPick(i) {
   cmdSel = i;
   [...$('#cmdResults').children].forEach((li, j) => { li.classList.toggle('sel', j === i); li.setAttribute('aria-selected', String(j === i)); });
 }
-function cmdRun(i) { const it = cmdItems[i]; cmdRunning = true; closeCmd(); it?.run(); cmdRunning = false; }
+function cmdRun(i) { const it = cmdItems[i]; if (it?.keep) return it.run(); cmdRunning = true; closeCmd(); it?.run(); cmdRunning = false; }
 $('#cmdInput').addEventListener('input', cmdUpdate);
 $('#cmdInput').addEventListener('keydown', e => {
   // The bar owns its keys while the field has focus. Without this, Escape reached the window
@@ -2304,6 +2364,7 @@ $('#cmdInput').addEventListener('keydown', e => {
   e.stopPropagation();
   if (e.key === 'ArrowDown') { e.preventDefault(); cmdPick(Math.min(cmdSel + 1, cmdItems.length - 1)); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); cmdPick(Math.max(cmdSel - 1, 0)); }
+  else if (e.key === 'Tab' && !cmdScope && siteHint(e.currentTarget.value.trim().toLowerCase())) { e.preventDefault(); scopeTo(siteHint(e.currentTarget.value.trim().toLowerCase()).host); }
   else if (e.key === 'Tab') {
     // Tab walks the row of sites: all → first → second → … → all. The reference behaviour is
     // "press Tab to search here", and the chip you land on is the answer to "here".
@@ -2441,7 +2502,7 @@ const peekW = () => state.settings.layout === 'compact'
 function sidebarOverlay(on, w, force) {
   if (sideOver === on && !force) return;
   sideOver = on;
-  send({ t: 'chrome', over: { on, w: w || peekW() } });
+  send({ t: 'chrome', over: { on, w: w || peekW(), right: state.settings.side === 'right' } });
 }
 // Leaving the sidebar is not a snap. The pointer gets a moment of leeway to come back — you
 // cross the panel on the way to the page all the time — and the panel fades out instead of
@@ -2526,6 +2587,13 @@ $('#peekGrow').addEventListener('pointerdown', e => {
 
 // The compact bar: its own buttons, and its own menu on right-click.
 $('#cbNewTab').onclick = () => openCmd('new');
+$('#splitBtn').innerHTML = ICO_SPLIT.right;
+$('#splitBtn').onclick = e => {
+  const t = activeTab();
+  if (!t) return toast('Open a page to split');
+  const r = e.currentTarget.getBoundingClientRect();
+  splitMenu(t.id, Math.min(r.left, innerWidth - 250), r.bottom + 6);
+};
 $('#cbar').addEventListener('contextmenu', e => { if (e.target.closest('button')) return; e.preventDefault(); compactMenu(e.clientX, e.clientY); });
 $('#cbar').addEventListener('dblclick', e => { if (!e.target.closest('button')) send({ t: 'win', op: 'max' }); });
 
@@ -3067,7 +3135,7 @@ const Wave = window.Wave = {
   addEssential, openEssential, removeEssential, clearToday, switchSpace, createSpace, deleteSpace,
   frameMenu, compactMenu, newTabMenu, linkMenu, setLayout, cbarAuto, placeChrome,
   openSitePop, openShotTool,
-  newFolder, newSpace, openNewSpace, closeNewSpace, folderToSpace, splitMenu, splitPicker, appMenu, openPeek, closePeek, applyTheme, setBoost, openBoost, openSettings, openSpaceSettings, openCmd, syncPage, splitWith, unsplit, setView, toggleSidebar, reopenClosed, PALETTES, THEMES, ICONS,
+  siteName, newFolder, newSpace, openNewSpace, closeNewSpace, folderToSpace, splitMenu, splitPicker, appMenu, openPeek, closePeek, applyTheme, setBoost, openBoost, openSettings, openSpaceSettings, openCmd, syncPage, splitWith, unsplit, setView, toggleSidebar, reopenClosed, PALETTES, THEMES, ICONS,
   media, openNowPlaying, closeNowPlaying, openRecents, closeRecents, sideButtons,
   get view() { return view; },
 };
