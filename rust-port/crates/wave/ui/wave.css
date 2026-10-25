@@ -535,8 +535,10 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .page iframe { border-radius: var(--radius); }
 .app .page-card.split { background: transparent; box-shadow: none; }
 .split-divider { position: absolute; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 2; }
-.split-divider::after { content: ""; position: absolute; left: 3px; top: 50%; width: 2px; height: 36px; margin-top: -18px; border-radius: 2px; background: color-mix(in oklab, var(--ink) 25%, transparent); }
-.split-divider:hover::after { background: color-mix(in oklab, var(--ink) 50%, transparent); }
+.split-divider.col { top: auto; bottom: auto; left: 0; right: 0; width: auto; height: 8px; cursor: row-resize; }
+.split-divider::after { content: ""; position: absolute; left: 3px; top: 50%; width: 2px; height: 36px; margin-top: -18px; border-radius: 2px; background: color-mix(in oklab, var(--ink) 25%, transparent); opacity: 0; transition: opacity .15s; }
+.split-divider.col::after { left: 50%; top: 3px; width: 36px; height: 2px; margin: 0 0 0 -18px; }
+.split-divider:hover::after { opacity: 1; }
 
 /* Ask Wave blurs only a band along the bottom; the page above stays live. The blur is a
    pool, not a rectangle: one radial mask fades it out on the top and both sides, so it
@@ -1104,3 +1106,49 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 /* The spaces row: the pair of icons sits in the middle of the space between Canvas and the + button. */
 .space-dots { gap: 6px; }
 .dot { width: 24px; height: 24px; }
+
+/* ---------- round 10: split headers, split rows, compact bar, fades ---------- */
+.split-heads { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.shead { position: absolute; display: flex; align-items: center; gap: 2px; padding: 0 6px; box-sizing: border-box; pointer-events: auto;
+  color: var(--ink-2); font-size: 12px; border-radius: var(--r-md) var(--r-md) 0 0; }
+.shead.on { color: var(--ink); }
+.shead .sh-b { width: 24px; height: 24px; border-radius: var(--r-sm); display: grid; place-items: center; flex: none; }
+.shead .sh-b:hover { background: var(--hover); }
+.shead .sh-b svg { width: 14px; height: 14px; }
+.shead .sh-url { flex: 1; min-width: 0; margin: 0 6px; padding: 3px 9px; border-radius: var(--r-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: color-mix(in oklab, var(--ink) 7%, transparent); }
+.shead.on .sh-url { background: color-mix(in oklab, var(--ink) 11%, transparent); }
+.app .page-card.split { background: transparent; box-shadow: none; overflow: visible; }
+
+.tab.split-row { padding: 0 4px 0 0; gap: 0; }
+.split-row .half { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--r-sm); }
+.split-row .half.on { background: var(--active); }
+.split-row .half:hover:not(.on) { background: var(--hover); }
+.split-row .vsep { width: 1px; height: 56%; background: var(--line); flex: none; margin: 0 2px; }
+.split-row .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The compact bar: the Wave menu and navigation at the left, then the address; on the right only
+   New Tab, the pinned extensions and the window buttons. */
+.cb-left { gap: 2px; }
+@container (max-width: 210px) { .cbar .cb-right > #cbNewTab { display: none; } }
+
+/* Ask Wave fades out as softly as it comes in; so does the Canvas wash. */
+.ask.out { animation: ask-out .3s var(--ease) forwards; pointer-events: none; }
+@keyframes ask-out { to { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+.veil.low { animation: veil-in .45s var(--ease); }
+.veil.low.out { opacity: 0; transition: opacity .3s var(--ease); }
+@keyframes veil-in { from { opacity: 0; } }
+#arcPop.side-pop.out { animation: arc-out .3s var(--ease) forwards; pointer-events: none; }
+@keyframes arc-out { to { opacity: 0; } }
+
+/* Create a Space: the profile picker is part of the panel, not a native dropdown. */
+.nsp-pick { position: relative; }
+.nsp-pick > .nsp-row { width: 100%; }
+.nsp-list { margin-top: 5px; padding: 4px; border-radius: var(--r-md); display: flex; flex-direction: column; gap: 1px;
+  background: color-mix(in oklab, #fff 62%, transparent); box-shadow: inset 0 0 0 1px rgba(255,255,255,.55); backdrop-filter: blur(14px); }
+.nsp[data-ink="light"] .nsp-list { background: rgba(0,0,0,.28); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+.nsp-list button { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 9px; border-radius: var(--r-sm); text-align: left; font-size: 12.5px; color: var(--ink); }
+.nsp-list button:hover, .nsp-list button.on { background: color-mix(in oklab, var(--ink) 12%, transparent); }
+.nsp-list button.on::after { content: "\2713"; margin-left: auto; opacity: .7; }
+.nsp-list input { width: 100%; height: 32px; border: 0; outline: 0; border-radius: var(--r-sm); padding: 0 9px; font-size: 12.5px; color: var(--ink); background: color-mix(in oklab, var(--ink) 9%, transparent); }
+.nsp { background: linear-gradient(150deg, color-mix(in oklab, var(--a) 88%, #12222b), color-mix(in oklab, var(--b) 88%, #12222b) 55%, color-mix(in oklab, var(--c) 88%, #12222b)); }

@@ -68,6 +68,7 @@
   };
 
   async function open(prefill = '') {
+    if (closing) finishClose();
     if (open_) { input.value = prefill || input.value; return input.focus(); }
     Wave.closeAll();
     open_ = true;
@@ -91,8 +92,16 @@
     if (!open_) return;
     clearTimeout(idle);
     open_ = false;
-    ask.hidden = true; mm.hidden = true;
+    mm.hidden = true;
+    // It fades out the way it faded in: the window drifts down and dissolves, and the blurred band with it.
+    ask.classList.add('out');
+    closing = setTimeout(finishClose, 300);
     Wave.veilOff();
+  }
+  let closing = 0;
+  function finishClose() {
+    clearTimeout(closing); closing = 0;
+    ask.hidden = true; ask.classList.remove('out');
   }
   ask.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); mm.hidden ? close() : toggleMenu(false); } });
   $('#veil').addEventListener('click', () => open_ && !busy && close());

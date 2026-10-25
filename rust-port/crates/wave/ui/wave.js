@@ -378,7 +378,7 @@ function showPage(id) {
 /* The page area: one pane, or two side by side in split view. The shell places each
    tab's native view in its rectangle; the chrome only draws the gap between them. */
 let crop = 0;      // px of the page bottom given to Ask Wave's blurred band
-let panes = [], lastLayout = '', syncQueued = false;
+let panes = [], lastLayout = '', syncQueued = false, splitGap = null;
 /* Layout is coalesced to one pass per frame and skipped when nothing moved, so dragging
    the window edge or the sidebar doesn't flood the shell with identical messages. */
 function syncPage() {
@@ -400,10 +400,18 @@ function doSync() {
   ids.forEach(id => ensureLive(tab(id)));
   const r = $('#pageCard').getBoundingClientRect();
   const x = r.left, w = r.width;
-  const hgt = Math.max(0, r.height - crop), gap = 8, ratio = s.ratio || .5;
-  panes = ids.length === 2
-    ? [{ id: ids[0], x, y: r.top, w: w * ratio - gap / 2, h: hgt }, { id: ids[1], x: x + w * ratio + gap / 2, y: r.top, w: w * (1 - ratio) - gap / 2, h: hgt }]
-    : ids.map(id => ({ id, x, y: r.top, w, h: hgt }));
+  const hgt = Math.max(0, r.height - crop), gap = 6, ratio = s.ratio || .5, col = s.splitDir === 'col';
+  let heads = [];
+  if (ids.length === 2) {
+    // Two boxes (a header and a page each), side by side or stacked, with a gap between.
+    const boxes = col
+      ? [{ x, y: r.top, w, h: Math.round(hgt * ratio - gap / 2) }, { x, y: r.top + Math.round(hgt * ratio - gap / 2) + gap, w, h: hgt - Math.round(hgt * ratio - gap / 2) - gap }]
+      : [{ x, y: r.top, w: Math.round(w * ratio - gap / 2), h: hgt }, { x: x + Math.round(w * ratio - gap / 2) + gap, y: r.top, w: w - Math.round(w * ratio - gap / 2) - gap, h: hgt }];
+    heads = boxes.map((b, i) => ({ id: ids[i], x: b.x, y: b.y, w: b.w, h: HEAD_H }));
+    panes = boxes.map((b, i) => ({ id: ids[i], x: b.x, y: b.y + HEAD_H, w: b.w, h: Math.max(0, b.h - HEAD_H) }));
+    splitGap = col ? { y: boxes[0].y + boxes[0].h + gap / 2 - r.top } : { x: boxes[0].x + boxes[0].w + gap / 2 - r.left };
+  } else panes = ids.map(id => ({ id, x, y: r.top, w, h: hgt }));
+  drawSplitHeads(heads, r);
   const all = peek ? [...panes, peekRect()] : panes;
   // The frozen page behind an overlay must follow the layout, or changing a setting leaves
   // the blurred snapshot floating where the page used to be.
@@ -419,7 +427,8 @@ function doSync() {
   if (msg !== lastLayout) { lastLayout = msg; send(JSON.parse(msg)); }
   const div = $('#splitDivider');
   div.hidden = ids.length !== 2;
-  if (ids.length === 2) div.style.left = x - r.left + w * ratio - 4 + 'px';
+  div.classList.toggle('col', col);
+  if (ids.length === 2) { if (col) { div.style.top = splitGap.y - 4 + 'px'; div.style.left = '0px'; } else { div.style.left = splitGap.x - 4 + 'px'; div.style.top = '0px'; } }
   $('#pageCard').classList.toggle('split', ids.length === 2);
   $('#empty').hidden = view !== 'page' || !!shownTab;
 }
@@ -429,10 +438,15 @@ function focusPane(id) { // the user clicked into one side of a split
   s.active = shownTab = id;
   syncPage(); render(); save();
 }
-function splitWith(a, b) { // show tab b beside tab a
+/* Split view: two pages, side by side or stacked. `dir` is where the new page goes relative to the one
+   you are on: left, right, top or bottom of the screen. */
+let pendingSplit = null;
+function splitWith(a, b, dir = 'right') {
   const s = space();
   if (!tab(a) || !tab(b) || a === b) return;
-  s.split = [a, b]; s.ratio = .5;
+  s.split = dir === 'left' || dir === 'top' ? [b, a] : [a, b];
+  s.splitDir = dir === 'top' || dir === 'bottom' ? 'col' : 'row';
+  s.ratio = .5;
   activate(b);
 }
 function unsplit() {
@@ -442,11 +456,57 @@ function unsplit() {
   $('#splitDivider').hidden = true;
   syncPage(); render(); save();
 }
-function splitPicker(id, x, y) {
+/* "Split view" asks where, then what: a side of the screen, then a tab (or a new one). */
+const ICO_SPLIT = { left: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M7 3v10"/><path d="M2.5 5.5h4v5h-4z" fill="currentColor" stroke="none" opacity=".35"/></svg>',
+  right: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M9 3v10"/><path d="M9.5 5.5h4v5h-4z" fill="currentColor" stroke="none" opacity=".35"/></svg>',
+  top: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 8h12"/><path d="M3 3.5h10v4H3z" fill="currentColor" stroke="none" opacity=".35"/></svg>',
+  bottom: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 8h12"/><path d="M3 8.5h10v4H3z" fill="currentColor" stroke="none" opacity=".35"/></svg>' };
+function splitMenu(id, x, y) {
+  const s = space();
+  if (s.split?.includes(id)) return menu(x, y, [['Close split view', unsplit]]);
+  menu(x, y, [
+    ['Split view', null, 'head'],
+    ['To the left', () => setTimeout(() => splitPicker(id, 'left', x, y)), '', '', ICO_SPLIT.left],
+    ['To the right', () => setTimeout(() => splitPicker(id, 'right', x, y)), '', '', ICO_SPLIT.right],
+    ['To the top', () => setTimeout(() => splitPicker(id, 'top', x, y)), '', '', ICO_SPLIT.top],
+    ['To the bottom', () => setTimeout(() => splitPicker(id, 'bottom', x, y)), '', '', ICO_SPLIT.bottom],
+  ]);
+}
+function splitPicker(id, dir, x, y) {
   const s = space();
   const others = [...s.pinned, ...s.today].filter(o => o !== id && tab(o));
-  if (!others.length) return toast('Open another tab to split with');
-  menu(x, y, others.slice(0, 14).map(o => [tab(o).custom || tab(o).title, () => splitWith(id, o)]));
+  menu(x, y, [
+    ['New tab', () => { pendingSplit = { id, dir }; openCmd('new'); }, '', 'Ctrl+T'],
+    others.length ? '-' : null,
+    ...others.slice(0, 12).map(o => [tab(o).custom || tab(o).title || hostOf(tab(o).url), () => splitWith(id, o, dir)]),
+  ]);
+}
+
+/* Each side of a split has a thin header of its own: back, forward, the page's address, and a button
+   to leave the split. They sit in the strip above their page, which is chrome, so a page never covers them. */
+const HEAD_H = 30;
+function drawSplitHeads(heads, origin) {
+  const box = $('#splitHeads');
+  if (!heads.length) { box.replaceChildren(); box.dataset.sig = ''; return; }
+  const sig = heads.map(hd => `${hd.id}:${tab(hd.id)?.url}:${shownTab === hd.id}`).join('|');
+  if (box.dataset.sig !== sig) {
+    box.dataset.sig = sig;
+    box.replaceChildren(...heads.map(hd => {
+      const t = tab(hd.id);
+      const go = js => e => { e.stopPropagation(); send({ t: 'exec', id: hd.id, js }); };
+      const btn = (cls, title, svg, fn) => h('button', { class: cls, title, 'aria-label': title, onclick: fn, innerHTML: svg });
+      return h('div', { class: 'shead' + (shownTab === hd.id ? ' on' : ''), dataset: { id: hd.id }, onpointerdown: () => focusPane(hd.id) },
+        btn('sh-b', 'Back', '<svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg>', go('history.back()')),
+        btn('sh-b', 'Forward', '<svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg>', go('history.forward()')),
+        btn('sh-b', 'Reload', '<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/></svg>', go('location.reload()')),
+        h('span', { class: 'sh-url', title: t?.url || '' }, (t?.url || '').replace(/^https?:\/\//, '').replace(/\/$/, '')),
+        btn('sh-b sh-x', 'Close split view', '<svg viewBox="0 0 16 16"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>', e => { e.stopPropagation(); unsplit(); }));
+    }));
+  }
+  heads.forEach((hd, i) => {
+    const el = box.children[i];
+    if (el) Object.assign(el.style, { left: hd.x - origin.left + 'px', top: hd.y - origin.top + 'px', width: hd.w + 'px', height: hd.h + 'px' });
+  });
 }
 
 function activate(id) {
@@ -471,6 +531,7 @@ function activate(id) {
 }
 
 function openTab(input, { focus = true, spaceId = state.activeSpace, title } = {}) {
+  if (pendingSplit && focus) { const p = pendingSplit; pendingSplit = null; const t = openTab(input, { focus: false, spaceId, title }); if (t) splitWith(p.id, t.id, p.dir); return t; }
   const url = toUrl(input);
   if (!url) return null;
   const s = state.spaces.find(x => x.id === spaceId) || space();
@@ -731,16 +792,32 @@ function buildNewSpace() {
       nsSync();
     } }, i)));
 
-  const profile = h('select', { id: 'nsProfile', 'aria-label': 'Profile', onchange: e => {
-    if (e.target.value !== '+') { st.profile = e.target.value; nsSync(); return; }
-    const n = prompt('Profile name')?.trim();
-    if (n) { const p = { id: 'p' + uid(), name: n }; state.profiles.push(p); st.profile = p.id; save(); }
-    e.target.replaceChildren(...profileOpts());
-    e.target.value = st.profile;
-  } });
-  const profileOpts = () => [...state.profiles.map(p => h('option', { value: p.id, selected: p.id === st.profile }, p.name)),
-    h('option', { value: '+' }, 'New profile…')];
-  profile.replaceChildren(...profileOpts());
+  // The profile picker is a list inside the panel (a native dropdown would be a plain white box
+  // on top of the frosted one): the current profile, and a list of the others that opens beneath it.
+  const list = h('div', { class: 'nsp-list', id: 'nsProfileList', role: 'listbox', hidden: true });
+  const fillList = () => {
+    list.replaceChildren(...state.profiles.map(p => h('button', { type: 'button', role: 'option', class: p.id === st.profile ? 'on' : '',
+      onclick: () => { st.profile = p.id; list.hidden = true; nsSync(); } }, p.name)),
+      h('button', { type: 'button', onclick: () => {
+        const inp = h('input', { type: 'text', placeholder: 'Profile name', 'aria-label': 'New profile name',
+          onkeydown: e => {
+            e.stopPropagation();
+            if (e.key === 'Escape') { e.preventDefault(); fillList(); }
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              const n = inp.value.trim();
+              if (n) { const p = { id: 'p' + uid(), name: n }; state.profiles.push(p); st.profile = p.id; save(); list.hidden = true; nsSync(); }
+            }
+          } });
+        list.replaceChildren(inp); inp.focus();
+      } }, '+ New profile…'));
+  };
+  const profile = h('div', { class: 'nsp-pick' },
+    h('button', { type: 'button', class: 'nsp-row', id: 'nsProfileBtn', 'aria-haspopup': 'listbox', 'aria-expanded': 'false',
+      onclick: e => { const open = list.hidden; if (open) fillList(); list.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open)); } },
+      h('i', { class: 'pdot', id: 'nsProfileDot' }), h('span', { class: 'nsp-row-t', id: 'nsProfileName' }, ''),
+      h('span', { class: 'nsp-row-v', innerHTML: '<svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>' })),
+    list);
 
   const themes = h('div', { class: 'ns-themes', id: 'nsThemes' }, THEMES.map(t =>
     h('button', { type: 'button', class: 'ns-sw', title: t.name, 'aria-label': t.name,
@@ -775,8 +852,7 @@ function buildNewSpace() {
       h('div', { class: 'nsp-body' },
         h('label', { class: 'nsp-field' },
           h('span', { class: 'nsp-field-ico', innerHTML: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2.4"/><path d="M6 3v10"/></svg>' }), name),
-        h('label', { class: 'nsp-row' }, h('i', { class: 'pdot', id: 'nsProfileDot' }), profile,
-          h('span', { class: 'nsp-row-v', innerHTML: '<svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg>' })),
+        profile,
         h('button', { type: 'button', class: 'nsp-row', id: 'nsThemeBtn', 'aria-expanded': 'false',
           onclick: e => {
             const wrap = $('#nsThemesWrap'), open = wrap.hidden;
@@ -814,7 +890,7 @@ function nsSync() {
   $('#nsCreate').disabled = !st.name.trim();
   const p = profileOf({ profile: st.profile });
   $('#nsProfileDot').style.background = `linear-gradient(150deg,${st.a},${st.b},${st.c})`;
-  $('#nsProfile').title = p?.name || 'Profile';
+  $('#nsProfileName').textContent = p?.name || 'Profile';
   // A folder's tabs come along: show them, so the panel says what is being carried over.
   const rows = $('#nsRows');
   if (st.tabs.length) {
@@ -898,7 +974,7 @@ function placeChrome() {
     $('#cbMid').append($('#urlPill'));
     $('#cbApp').append($('#appMenuBtn'));
     // Pinned extensions, then the window buttons, at the right end (the left on macOS).
-    if (win) { $('.cb-right').insertBefore($('#extBar'), $('#cbApp')); $('.cb-right').append($('#winControls')); }
+    if (win) { $('#cbNewTab').after($('#extBar')); $('.cb-right').append($('#winControls')); }
     else { $('#cbWin').append($('#winControls')); right.prepend($('#extBar')); }
   } else if (on || cap) {
     // The top bar: menu and navigation at the left, the address in the middle, then the pinned
@@ -956,9 +1032,9 @@ addEventListener('pointermove', e => {
     if (app.classList.contains('peek')) return;   // the sidebar got here first
     if (!app.classList.contains('cbar-near')) { app.classList.add('cbar-near'); cbarMsg(); }
     clearTimeout(cbarGone);
-  } else if (e.clientY > 70 && app.classList.contains('cbar-near')) {
+  } else if (e.clientY > 40 && app.classList.contains('cbar-near')) {
     clearTimeout(cbarGone);
-    cbarGone = setTimeout(() => { app.classList.remove('cbar-near'); cbarMsg(); }, 200);
+    cbarGone = setTimeout(() => { app.classList.remove('cbar-near'); cbarMsg(); }, PEEK_LEAVE);
   }
 });
 
@@ -1082,6 +1158,30 @@ const ico = {
   x: '<svg viewBox="0 0 16 16"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>',
 };
 
+/* A split is one row in the sidebar: both pages' names, with a thin vertical line between them. */
+function splitRow(ta, tb, section) {
+  const s = space();
+  const half = t => h('span', { class: 'half' + (s.active === t.id ? ' on' : ''), title: t.url, role: 'button', tabindex: 0,
+    onclick: () => activate(t.id), oncontextmenu: e => { e.preventDefault(); e.stopPropagation(); tabMenu(t, e.clientX, e.clientY); } },
+    favicon(t.url), h('span', { class: 'title' }, t.custom || siteName(t.url)));
+  return h('li', { class: 'tab split-row', dataset: { id: ta.id } }, half(ta), h('i', { class: 'vsep' }), half(tb),
+    h('button', { class: 'x', title: 'Close split view', 'aria-label': 'Close split view', innerHTML: ico.x, onclick: unsplit }));
+}
+/* The rows for a list of tab ids: a split whose two pages are both in the list becomes one row. */
+function tabRows(ids, section) {
+  const s = space(), out = [], done = new Set();
+  for (const id of ids) {
+    const t = tab(id);
+    if (!t || done.has(id)) continue;
+    const mate = s.split?.includes(id) ? s.split.find(o => o !== id) : null;
+    if (mate && ids.includes(mate) && tab(mate)) {
+      done.add(mate);
+      out.push(splitRow(...(s.split[0] === id ? [t, tab(mate)] : [tab(mate), t]), section));
+    } else out.push(tabRow(t, section));
+  }
+  return out;
+}
+
 function tabRow(t, section) {
   const s = space();
   const drift = t.home && path(t.url) !== path(t.home);
@@ -1159,7 +1259,7 @@ function folderRow(s, f, kids) {
 function pinnedTree(s, parent = null) {
   return [
     ...s.folders.filter(f => (f.parent ?? null) === parent).map(f => folderRow(s, f, pinnedTree(s, f.id))),
-    ...s.pinned.map(tab).filter(t => t && (t.folder ?? null) === parent).map(t => tabRow(t, 'pinned')),
+    ...tabRows(s.pinned.filter(id => (tab(id)?.folder ?? null) === parent), 'pinned'),
   ];
 }
 
@@ -1225,7 +1325,7 @@ function render() {
   $('#spaceName').replaceChildren(h('span', { class: 'emoji' }, s.icon), h('span', {}, s.name));
   const tree = pinnedTree(s);
   $('#pinnedList').replaceChildren(...(tree.length ? tree : [pinZone()]));
-  $('#todayList').replaceChildren(...s.today.map(id => tab(id)).filter(Boolean).map(x => tabRow(x, 'today')));
+  $('#todayList').replaceChildren(...tabRows(s.today, 'today'));
   $('#clearToday').hidden = !s.today.length;
 
   $('#spaceDots').replaceChildren(...state.spaces.map(x => h('button', {
@@ -1412,9 +1512,7 @@ function tabMenu(t, x, y) {
     ['Copy link', () => copyText(t.url, 'Link copied')],
     ['Duplicate', () => openTab(t.url)],
     '-',
-    space().split?.includes(t.id) ? ['Close split view', unsplit]
-      : t.id !== space().active && activeTab() ? [`Split with ${activeTab().custom || activeTab().title}`, () => splitWith(space().active, t.id)] : null,
-    ['Split view with…', () => setTimeout(() => splitPicker(t.id, x, y))],
+    ['Split view', () => setTimeout(() => splitMenu(t.id, x, y))],
     '-',
     ...state.spaces.filter(s => s.id !== t.space).map(s => [`Move to ${s.icon} ${s.name}`, () => moveTabToSpace(t.id, s.id)]),
     '-',
@@ -1426,6 +1524,7 @@ function spaceMenu(s, x, y) {
     ['Edit space…', () => openSpaceSettings(s)],
     ['New folder', () => { switchSpace(s.id); newFolder(); }],
     ['New space', newSpace],
+    ['Tabs overview', () => openTabsOverview()],
     ['Settings', () => openSettings(), '', 'Ctrl+,'],
     '-',
     ['Delete space', () => confirmPanel(`Delete "${s.name}" and its tabs?`, () => deleteSpace(s.id)), 'danger'],
@@ -1553,7 +1652,7 @@ function linkMenu(x, y) {
     '-',
     ['Add to Essentials', () => addEssential(t.url, t.title)],
     ['Save to Canvas', () => Wave.canvas?.saveTab(t.id), '', 'Ctrl+D'],
-    s.split ? null : ['Open in split view', () => { const nt = openTab(t.url, { focus: false }); if (nt) splitWith(t.id, nt.id); }],
+    s.split ? null : ['Open in split view', () => { const nt = openTab(t.url, { focus: false }); if (nt) splitWith(t.id, nt.id, 'right'); }],
     '-',
     ['Boost this site', openBoost, state.boosts[hostOf(t.url)]?.on ? 'check' : ''],
   ]);
@@ -1803,7 +1902,9 @@ function toast(text) {
 /* 'low' (Ask Wave) blurs only a band along the bottom of the window: the page above it
    stays live and is shortened to end where the band starts. */
 let overlayDepth = 0, veilMode = 'full';
+let veilHide = 0;
 async function veilOn(mode = 'full') {
+  clearTimeout(veilHide); $('#veil').classList.remove('out');
   if (overlayDepth++) return;
   veilMode = mode;
   const veil = $('#veil'), img = $('#veilShot');
@@ -1823,7 +1924,12 @@ async function veilOn(mode = 'full') {
 function veilOff() {
   if (--overlayDepth > 0) return;
   overlayDepth = 0;
-  $('#veil').hidden = true;
+  const v = $('#veil');
+  if (veilMode === 'low' && !v.hidden) {
+    // Ask Wave's band fades away with the chat, then the page gets its height back.
+    v.classList.add('out');
+    veilHide = setTimeout(() => { v.hidden = true; v.classList.remove('out'); }, 300);
+  } else v.hidden = true;
   if (veilMode === 'low') { crop = 0; syncPage(); send({ t: 'overlay', on: false, low: true }); } else send({ t: 'overlay', on: false });
 }
 
@@ -2038,8 +2144,7 @@ function appMenu(x, y) {
     ['New folder', () => newFolder()],
     ['Reopen closed tab', reopenClosed, '', 'Ctrl+Shift+T'],
     '-',
-    t ? ['Split view with…', () => setTimeout(() => splitPicker(t.id, x, y))] : null,
-    space().split ? ['Close split view', unsplit] : null,
+    t ? ['Split view', () => setTimeout(() => splitMenu(t.id, x, y))] : null,
     ['Canvas', () => setView('canvas'), '', 'Ctrl+Shift+K'],
     ['Ask Wave', () => Wave.ask?.open(), '', 'Ctrl+E'],
     ['Library', () => Wave.library?.open('spaces')],
@@ -2137,7 +2242,8 @@ function openCmd(mode = 'new') {
   input.focus(); input.select();
   cmdUpdate();
 }
-function closeCmd() { if (!$('#cmdbar').hidden) { $('#cmdbar').hidden = true; cmdScope = null; veilOff(); closePeekIfIdle(); } }
+let cmdRunning = false;
+function closeCmd() { if (!cmdRunning) pendingSplit = null; if (!$('#cmdbar').hidden) { $('#cmdbar').hidden = true; cmdScope = null; veilOff(); closePeekIfIdle(); } }
 function cmdUpdate() {
   const raw = $('#cmdInput').value;
   const q = raw.trim().toLowerCase();
@@ -2163,7 +2269,7 @@ function cmdUpdate() {
     if (scope && !inScope(t.url)) continue;
     if (q ? match(t.title, t.url, t.custom) : t.space === state.activeSpace) {
       const named = t.custom || t.title;
-      items.push({ kind: 'tab', fav: t.url, label: named || siteName(t.url), meta: named ? (t.space ? 'Tab' : 'Essential') : 'Open website', run: () => activate(t.id) });
+      items.push({ kind: 'tab', fav: t.url, label: named || siteName(t.url), meta: named ? (t.space ? 'Switch to Tab' : 'Essential') : 'Open website', run: () => activate(t.id) });
       seen.add(t.url);
     }
   }
@@ -2189,7 +2295,7 @@ function cmdPick(i) {
   cmdSel = i;
   [...$('#cmdResults').children].forEach((li, j) => { li.classList.toggle('sel', j === i); li.setAttribute('aria-selected', String(j === i)); });
 }
-function cmdRun(i) { const it = cmdItems[i]; closeCmd(); it?.run(); }
+function cmdRun(i) { const it = cmdItems[i]; cmdRunning = true; closeCmd(); it?.run(); cmdRunning = false; }
 $('#cmdInput').addEventListener('input', cmdUpdate);
 $('#cmdInput').addEventListener('keydown', e => {
   // The bar owns its keys while the field has focus. Without this, Escape reached the window
@@ -2420,8 +2526,6 @@ $('#peekGrow').addEventListener('pointerdown', e => {
 
 // The compact bar: its own buttons, and its own menu on right-click.
 $('#cbNewTab').onclick = () => openCmd('new');
-$('#cbOverview').onclick = () => openTabsOverview();
-$('#cbSpaces').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); spaceMenu(space(), r.left, r.bottom + 4); };
 $('#cbar').addEventListener('contextmenu', e => { if (e.target.closest('button')) return; e.preventDefault(); compactMenu(e.clientX, e.clientY); });
 $('#cbar').addEventListener('dblclick', e => { if (!e.target.closest('button')) send({ t: 'win', op: 'max' }); });
 
@@ -2567,9 +2671,18 @@ $('#canvasBtn').addEventListener('drop', e => { e.preventDefault(); const id = +
 
 // Drag the gap between split panes to resize them.
 $('#splitDivider').addEventListener('pointerdown', e => {
-  const div = e.currentTarget, s = space(), r = $('#pageCard').getBoundingClientRect();
+  const div = e.currentTarget, sp = space(), r = $('#pageCard').getBoundingClientRect(), col = sp.splitDir === 'col';
   div.setPointerCapture(e.pointerId);
-  const move = ev => { s.ratio = Math.min(.8, Math.max(.2, (ev.clientX - r.left) / r.width)); syncPage(); };
+  let last = -1;
+  const move = ev => {
+    // Resizing two live pages is the heaviest thing the shell does, so the ratio moves in 4 px steps.
+    const raw = col ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width;
+    const px = Math.round(raw * (col ? r.height : r.width) / 4) * 4;
+    if (px === last) return;
+    last = px;
+    sp.ratio = Math.min(.8, Math.max(.2, px / (col ? r.height : r.width)));
+    syncPage();
+  };
   div.addEventListener('pointermove', move);
   div.addEventListener('pointerup', () => { div.removeEventListener('pointermove', move); save(); }, { once: true });
 });
@@ -2729,6 +2842,7 @@ function openRecents() {
   if (root.dataset.layout === 'rail' || !drawArchive()) return;
   closeNowPlaying();
   const pop = $('#arcPop');
+  clearTimeout(arcHide); pop.classList.remove('out');
   pop.hidden = false;
   arcOpen = true;
   placeSidePop(pop, $('#canvasBtn'));
@@ -2736,7 +2850,15 @@ function openRecents() {
   const sb = $('.sidebar').getBoundingClientRect();
   Object.assign(pop.style, { left: sb.left + 'px', width: sb.width + 'px', bottom: Math.max(0, innerHeight - sb.bottom) + 'px' });
 }
-function closeRecents() { arcOpen = false; clearTimeout(arcTimer); $('#arcPop').hidden = true; }
+let arcHide = 0;
+function closeRecents() {
+  arcOpen = false; clearTimeout(arcTimer);
+  const pop = $('#arcPop');
+  if (pop.hidden || pop.classList.contains('out')) return;
+  pop.classList.add('out');
+  clearTimeout(arcHide);
+  arcHide = setTimeout(() => { pop.hidden = true; pop.classList.remove('out'); }, 300);
+}
 
 function mediaCmdCard(id, op, v) { // optimistic local state, then the page confirms
   const m = media.get(id);
@@ -2945,7 +3067,7 @@ const Wave = window.Wave = {
   addEssential, openEssential, removeEssential, clearToday, switchSpace, createSpace, deleteSpace,
   frameMenu, compactMenu, newTabMenu, linkMenu, setLayout, cbarAuto, placeChrome,
   openSitePop, openShotTool,
-  newFolder, newSpace, openNewSpace, closeNewSpace, folderToSpace, splitPicker, appMenu, openPeek, closePeek, applyTheme, setBoost, openBoost, openSettings, openSpaceSettings, openCmd, syncPage, splitWith, unsplit, setView, toggleSidebar, reopenClosed, PALETTES, THEMES, ICONS,
+  newFolder, newSpace, openNewSpace, closeNewSpace, folderToSpace, splitMenu, splitPicker, appMenu, openPeek, closePeek, applyTheme, setBoost, openBoost, openSettings, openSpaceSettings, openCmd, syncPage, splitWith, unsplit, setView, toggleSidebar, reopenClosed, PALETTES, THEMES, ICONS,
   media, openNowPlaying, closeNowPlaying, openRecents, closeRecents, sideButtons,
   get view() { return view; },
 };
