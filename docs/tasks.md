@@ -1,5 +1,7 @@
 # Wave: task list
 
+The plan for what comes next, including what Wave can learn from Zephium, is in [roadmap.md](roadmap.md).
+
 `[x]` done and checked in the app · `[~]` done in part · `[ ]` open
 
 ## Sidebar, tabs and spaces
@@ -20,7 +22,7 @@
 - [x] Windows top bar across the window: Wave menu, sidebar button, back, forward, reload, address in the middle, extensions, window buttons
 - [x] Back button aligned with the left edge of the page
 - [x] Split button at the top right; swaps with the sidebar button when tabs are on the right
-- [x] Plain window buttons: no colour, a light grey on hover only
+- [x] Windows caption buttons: thin glyphs on nothing, flush to the corner, a light grey on hover, Close turns red with a tooltip
 - [x] Layouts: Only Sidebar, Sidebar and Top Toolbar, Collapsed Sidebar, Compact (hide sidebar / toolbar / both)
 - [x] Right-click on the top bar: duplicates and extras removed
 - [x] Page area changes are instant in the app so the page and the interface never disagree (no tearing, no dark gap)
@@ -81,3 +83,15 @@
 - [ ] Automatic updates (design in `rust-port/crates/wave/UPDATES.md`; needs a release host and signing)
 - [ ] macOS parity (page snapshots, rounded corners, dictation, extensions)
 - [ ] Automated tests for the native behaviour (focus, clipping, split, downloads)
+
+## From the roadmap (see roadmap.md)
+- [ ] Assistant composer docked in the page frame; page radius equal to the app frame's
+- [ ] Tasks panel (plain-words capture, Today / Tomorrow / Upcoming, linked to the page, undo, "Make tasks")
+- [ ] Native ad and tracker blocker (engine, lists with updates, cosmetic hiding, "hide with a click", per-site pause)
+- [ ] Routines with runs, grants and approvals; routines kept separate from tasks
+- [ ] Work canvas: run nodes, helpers with live previews, plan to tasks
+- [ ] Skills, memory, provider keys in the system keychain
+- [ ] Inactive tab sleep; global launcher; new tab with time and tasks; time and focus; notes beside the page
+- [ ] macOS: top bar and navigation as liquid glass
+- [ ] Linux: decide the web engine
+- [ ] Trackpad gestures prototype

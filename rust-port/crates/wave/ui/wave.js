@@ -2628,7 +2628,8 @@ for (const b of document.querySelectorAll('[data-win]')) b.onclick = () => {
 addEventListener('beforeunload', flush);
 if (root.dataset.os === 'windows') { // caption buttons, not macOS traffic lights
   const glyph = { close: '<path d="m3.5 3.5 9 9m0-9-9 9"/>', min: '<path d="M3 8h10"/>', max: '<rect x="3.5" y="3.5" width="9" height="9" rx="1.2"/>' };
-  for (const b of document.querySelectorAll('.wc')) b.innerHTML = `<svg viewBox="0 0 16 16">${glyph[b.dataset.win]}</svg>`;
+  const fr = /^fr/i.test(navigator.language), names = fr ? { close: 'Fermer', min: 'Réduire', max: 'Agrandir' } : { close: 'Close', min: 'Minimize', max: 'Maximize' };
+  for (const b of document.querySelectorAll('.wc')) { b.innerHTML = `<svg viewBox="0 0 16 16">${glyph[b.dataset.win]}</svg>`; b.title = names[b.dataset.win]; b.setAttribute('aria-label', names[b.dataset.win]); }
 }
 document.addEventListener('pointerdown', e => {
   if (!NATIVE || e.button !== 0) return;

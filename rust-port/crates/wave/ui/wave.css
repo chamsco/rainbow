@@ -1212,3 +1212,13 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .model-row .mr-bar { height: 4px; border-radius: 2px; background: color-mix(in oklab, var(--glass-ink) 14%, transparent); overflow: hidden; margin-top: 4px; }
 .model-row .mr-bar i { display: block; height: 100%; background: var(--accent, var(--glass-ink)); }
 .onboard canvas.pixel { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* Windows caption buttons, as Windows draws them: thin glyphs on nothing, flush with the corner. A light grey
+   under the pointer; Close turns solid red with a white glyph. */
+:root[data-os="windows"] .win-controls { gap: 0; padding: 0; }
+:root[data-os="windows"] .wc { width: 46px; height: 32px; border-radius: 0; opacity: .85; }
+:root[data-os="windows"] .wc svg { width: 14px; height: 14px; stroke-width: 1; }
+:root[data-os="windows"] .win-controls .wc:hover, :root[data-os="windows"] .win-controls:hover .wc[data-win]:hover { opacity: 1; }
+:root[data-os="windows"] .win-controls .wc[data-win="close"]:hover, :root[data-os="windows"] .win-controls:hover .wc[data-win="close"]:hover {
+  background: #c42b1c; color: #fff; border-top-right-radius: 8px;
+}
