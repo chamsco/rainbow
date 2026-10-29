@@ -7,14 +7,14 @@
    The original runs the operation and target heads in a single speculative request
    (TypeSafe). This port keeps the shape that matters — one round trip per decision over a
    dynamic action space — on the ordinary Messages API, so it needs nothing but the API key
-   Ask Wave already has.
+   Ask Rainbow already has.
 
    The agent has its own cursor, injected into the page it is working on. It travels to a
    control before the control is used, on a deliberately wavy path, because a click that
    arrives from nowhere is impossible to follow and a perfectly straight glide reads as a
    machine teleporting. */
 (() => {
-  const S = () => Wave.state;
+  const S = () => Rainbow.state;
   const MAX_ACTIONS = 120, MAX_TEXT = 2500, MAX_STEPS = 24;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // The cursor takes the space's own accent, so it reads as this window's agent and not as a
@@ -29,7 +29,7 @@
   // WeakMap. String.raw: this text is sent to the page verbatim, so \n must survive as \n.
   const SNAPSHOT = String.raw`(() => {
     if (!document.body) return null;
-    const cache = window.__waveJev || (window.__waveJev = { ids: new WeakMap(), nodes: new Map(), next: 1 });
+    const cache = window.__rainbowJev || (window.__rainbowJev = { ids: new WeakMap(), nodes: new Map(), next: 1 });
     const id = e => {
       if (!cache.ids.has(e)) cache.ids.set(e, cache.next++);
       const n = cache.ids.get(e);
@@ -118,7 +118,7 @@
   // navigated, and the page it lands on has never seen this. String.raw for the same reason as
   // SNAPSHOT: the text goes to the page verbatim.
   const CURSOR = String.raw`(() => {
-    if (window.__waveCursor) return true;
+    if (window.__rainbowCursor) return true;
     const calm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
     const el = document.createElement('div');
     el.setAttribute('aria-hidden', 'true');
@@ -141,7 +141,7 @@
     };
 
     // Travel to (x, y) and return how long it takes. The path is a bow away from the straight
-    // line, plus a second smaller wave, plus a hand's tremor; all three vanish at both ends, so
+    // line, plus a second smaller rainbow, plus a hand's tremor; all three vanish at both ends, so
     // the cursor still lands exactly on the target.
     function to(x, y) {
       const from = at, dx = x - from.x, dy = y - from.y, dist = Math.hypot(dx, dy);
@@ -187,13 +187,13 @@
     function bye() {
       el.style.opacity = '0';
       setTimeout(() => el.remove(), 320);
-      window.__waveCursor = null;
+      window.__rainbowCursor = null;
     }
 
     put(at);
     document.documentElement.append(el);
     el.style.opacity = '1';
-    window.__waveCursor = { to: to, press: press, bye: bye, get when() { return when; } };
+    window.__rainbowCursor = { to: to, press: press, bye: bye, get when() { return when; } };
     return true;
   })()`;
 
@@ -202,7 +202,7 @@
   // model can never name a selector, a coordinate or a piece of script. The control is used when
   // the cursor gets there, not before; `ms` is the travel time, so the loop can wait it out.
   function act(a) {
-    const cache = window.__waveJev;
+    const cache = window.__rainbowJev;
     const el = cache && cache.nodes.get(a.node);
     if (!el || !el.isConnected) return { ok: false, why: 'stale' };
     if (a.kind === 'scroll') { scrollBy(0, a.delta); return { ok: true, ms: 0 }; }
@@ -215,7 +215,7 @@
     if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) return { ok: false, why: 'covered' };
     // The page may have navigated since the cursor was installed, so it is optional: without it
     // the action still happens, it just happens immediately.
-    const cur = window.__waveCursor;
+    const cur = window.__rainbowCursor;
     const ms = cur ? cur.to(x, y) : 0;
     const after = fn => { if (ms && cur) cur.when.then(fn); else fn(); };
     if (a.kind === 'fill' || a.kind === 'select') {
@@ -275,7 +275,7 @@ CLICK, TYPE_TEXT and SELECT need a target id from the table. Never invent an id.
 
   async function decide(goal, snap, steps) {
     const st = S().settings;
-    if (!st.apiKey) throw new Error('Add your Anthropic API key in Settings › Ask Wave.');
+    if (!st.apiKey) throw new Error('Add your Anthropic API key in Settings › Ask Rainbow.');
     if (st.model === 'builtin') throw new Error('The page agent needs a Claude model. Pick one from the model menu.');
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -305,13 +305,13 @@ CLICK, TYPE_TEXT and SELECT need a target id from the table. Never invent an id.
 
   /* ---------- the loop ---------- */
   async function run({ goal, tabId, onStep, maxSteps = MAX_STEPS }) {
-    const id = tabId || Wave.activeTab()?.id;
-    if (!id || !Wave.live.has(id)) throw new Error('Open a page first');
+    const id = tabId || Rainbow.activeTab()?.id;
+    if (!id || !Rainbow.live.has(id)) throw new Error('Open a page first');
     if (!goal || !goal.trim()) throw new Error('Say what to do on the page');
     const steps = [], seen = new Map();
     try {
       for (let i = 0; i < maxSteps; i++) {
-        const snap = await Wave.evalIn(id, SNAPSHOT);
+        const snap = await Rainbow.evalIn(id, SNAPSHOT);
         if (!snap || !snap.actions) throw new Error('Could not read this page');
         const d = await decide(goal, snap, steps);
         const op = String(d.operation || '').toUpperCase();
@@ -346,8 +346,8 @@ CLICK, TYPE_TEXT and SELECT need a target id from the table. Never invent an id.
         const text = d.text == null ? a.value || '' : String(d.text);
         // The cursor is a guest on someone else's page, and a step may have navigated: install it
         // again, then let the action wait for it to arrive.
-        if (kind !== 'scroll') await Wave.evalIn(id, cursorSrc());
-        const out = await Wave.evalIn(id, `(${act})(${JSON.stringify({ node: a.node, kind, text, delta: a.delta })})`);
+        if (kind !== 'scroll') await Rainbow.evalIn(id, cursorSrc());
+        const out = await Rainbow.evalIn(id, `(${act})(${JSON.stringify({ node: a.node, kind, text, delta: a.delta })})`);
         const s = { op, target, label: say(op, a, text), ok: !!(out && out.ok), why: out && out.why };
         steps.push(s); onStep?.(s);
         // The cursor has to finish travelling first; typing then needs a moment for suggestions
@@ -357,9 +357,9 @@ CLICK, TYPE_TEXT and SELECT need a target id from the table. Never invent an id.
       return { done: false, steps, why: 'steps', url: '' };
     } finally {
       // It is not this page's cursor. Fade it out however the run ended.
-      Wave.evalIn(id, 'window.__waveCursor && (window.__waveCursor.bye(), true)');
+      Rainbow.evalIn(id, 'window.__rainbowCursor && (window.__rainbowCursor.bye(), true)');
     }
   }
 
-  Wave.jev = { run, snapshot: id => Wave.evalIn(id || Wave.activeTab()?.id, SNAPSHOT) };
+  Rainbow.jev = { run, snapshot: id => Rainbow.evalIn(id || Rainbow.activeTab()?.id, SNAPSHOT) };
 })();

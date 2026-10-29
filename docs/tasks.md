@@ -1,6 +1,6 @@
-# Wave: task list
+# Rainbow: task list
 
-The plan for what comes next, including what Wave can learn from Zephium, is in [roadmap.md](roadmap.md).
+The plan for what comes next, including what Rainbow can learn from Zephium, is in [roadmap.md](roadmap.md).
 
 `[x]` done and checked in the app · `[~]` done in part · `[ ]` open
 
@@ -9,6 +9,8 @@ The plan for what comes next, including what Wave can learn from Zephium, is in 
 - [x] Spaces with their own theme; a space belongs to a profile with its own logins
 - [x] Creating a space: name, icon, in-panel profile picker, themes, a Cancel that works
 - [x] Essentials fill the row edge to edge and get rounder as more sit on one row
+- [x] Essentials reflow with the sidebar: four across when wide, three in the middle, two when squeezed
+- [x] Essentials stay below the top bar in every Windows layout; the toolbar layout no longer lifts them into the top-left corner
 - [x] Hover sidebar and top bar never out together in compact mode; same timing and fade for both
 - [x] Hover sidebar with tabs on the right
 - [x] Sidebar can be dragged to 420 px; the address bar adapts instead of the sidebar stopping
@@ -19,10 +21,12 @@ The plan for what comes next, including what Wave can learn from Zephium, is in 
 - [x] Tabs overview (a panel; reachable from the space menu and the space icon's right-click)
 
 ## Top bar and windows
-- [x] Windows top bar across the window: Wave menu, sidebar button, back, forward, reload, address in the middle, extensions, window buttons
+- [x] Windows top bar across the window: Rainbow menu, sidebar button, back, forward, reload, address in the middle, extensions, window buttons
 - [x] Back button aligned with the left edge of the page
 - [x] Split button at the top right; swaps with the sidebar button when tabs are on the right
 - [x] Windows caption buttons: thin glyphs on nothing, flush to the corner, a light grey on hover, Close turns red with a tooltip
+- [x] One 8 px frame radius for the page, split panes, Essentials and the floating surfaces; the radius setting can only make corners less round than the frame
+- [x] Settings is a page in the web frame (same radius and background as a site), not a floating panel
 - [x] Layouts: Only Sidebar, Sidebar and Top Toolbar, Collapsed Sidebar, Compact (hide sidebar / toolbar / both)
 - [x] Right-click on the top bar: duplicates and extras removed
 - [x] Page area changes are instant in the app so the page and the interface never disagree (no tearing, no dark gap)
@@ -40,47 +44,54 @@ The plan for what comes next, including what Wave can learn from Zephium, is in 
 - [x] Smaller bar; open-tab rows say "Switch to Tab"
 - [x] Gmail and other icons come from the site itself
 
-## Ask Wave
+## Ask Rainbow
 - [x] Floating chat with model picker, Chat mode, dictation
 - [x] Overlay with a blurred wash fading in and out; the page stays live
 - [x] Built-in commands do what was asked (site searches and more), window closes 6 s after a finished request
 - [ ] The assistant acting through the Decider model (needs the model installed; see On-device models)
 
+## Capture
+- [x] Screenshot/region capture saved to Canvas first, then read with Windows' own OCR (offline, no model)
+- [x] OCR text is kept on the card, searchable in Canvas and fed to the topic classifier
+- [x] A topic chosen by hand is never overwritten by classification
+- [ ] Read text out of images saved with right-click (needs a fetch-to-canvas step) and off full-page saves
+- [ ] Capture the page around a selection, not only the visible pane
+
 ## Canvas
 - [x] Infinite board of cards; Discover (mood and subject); Recently discovered
 - [x] Right-click an image or selected text on a page: Save to Canvas
-- [x] Cards sorted into topics by one function (`Wave.canvas.classify`)
+- [x] Cards sorted into topics by one function (`Rainbow.canvas.classify`)
+- [x] Captured images are written to `%LOCALAPPDATA%\Rainbow\media` and served locally; cards keep a short URL, so screenshots no longer fill the store
 - [x] On-device models: Sorter and Decider, used apart or together (fusion); installable from Settings
 - [ ] Choose the long-term default after some real use (both are in; compare by usage)
 - [ ] Download the saved image instead of linking it
 
 ## Library
 - [x] Spaces, Canvas, History, Boosts, Downloads, Prompts, Routines, Archive
-- [x] Routines run at start or daily while Wave is open
+- [x] Routines run at start or daily while Rainbow is open
 
 ## Menus and surfaces
 - [x] A transparent surface above every page for menus, the site options panel and notices
 - [x] One frosted glass, tint, radius and border for every context menu
 - [x] Notices (e.g. "Opened in a new tab") are solid and sit at the top right
-- [ ] Move the command bar and Ask Wave's input onto the surface (they draw correctly today)
+- [ ] Move the command bar and Ask Rainbow's input onto the surface (they draw correctly today)
 
 ## Extensions and profiles
 - [x] Extensions load per profile; pin them next to the address bar
 - [ ] Extension popups (Windows' web view does not provide them)
 
 ## First run
-- [x] Welcome animation: a drop into still water, ripples, waves, the name, then the app
-- [x] A pixel version of the same animation; Settings chooses smooth, pixel or both; replay buttons in Data
+- [x] Water welcome animation removed; the app opens directly
+- [x] Replay controls and the first-run welcome setting removed from Settings → Data
 - [ ] Step 1: Look (light or dark, tabs left or right, layout)
 - [ ] Step 2: Bring your things (import from other browsers)
 - [ ] Step 3: Profile and first space
-- [ ] Step 4: Ask Wave (built-in, your own key, or on-device models)
-- [ ] Step 5: Make Wave the default browser
-- [ ] Installer animation (the same water, shown while installing)
+- [ ] Step 4: Ask Rainbow (built-in, your own key, or on-device models)
+- [ ] Step 5: Make Rainbow the default browser
 
 ## Shipping
-- [x] Chrome embedded in the exe for release builds
-- [ ] Automatic updates (design in `rust-port/crates/wave/UPDATES.md`; needs a release host and signing)
+- [x] UI assets embedded in the exe for release builds; Chromium is the system WebView2 runtime, not bundled
+- [ ] Automatic updates (design in `rust-port/crates/rainbow/UPDATES.md`; needs a release host and signing)
 - [ ] macOS parity (page snapshots, rounded corners, dictation, extensions)
 - [ ] Automated tests for the native behaviour (focus, clipping, split, downloads)
 

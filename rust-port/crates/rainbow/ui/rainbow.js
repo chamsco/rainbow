@@ -1,8 +1,8 @@
 'use strict';
-/* Wave chrome: spaces, pinned/today tabs, global Essentials, command bar, boosts,
+/* Rainbow chrome: spaces, pinned/today tabs, global Essentials, command bar, boosts,
    settings. The page itself lives in the native shell (one webview per tab); in a plain
    browser (for UI work) tabs fall back to iframes. canvas.js and agent.js build on the
-   `Wave` object exported at the bottom. */
+   `Rainbow` object exported at the bottom. */
 
 const $ = (s, r = document) => r.querySelector(s);
 const h = (tag, props = {}, ...kids) => {
@@ -19,21 +19,21 @@ const h = (tag, props = {}, ...kids) => {
   for (const k of kids.flat()) if (k != null && k !== false) el.append(k);
   return el;
 };
-const NATIVE = !!window.WAVE_NATIVE;
+const NATIVE = !!window.RAINBOW_NATIVE;
 const root = document.documentElement;
-root.dataset.os = window.WAVE_OS || 'web';
+root.dataset.os = window.RAINBOW_OS || 'web';
 if (NATIVE) root.dataset.native = '';
 
 /* ---------------- state ---------------- */
 
-const KEY = 'pond.v1';
+const KEY = 'rainbow.v1';
 let seq = Date.now();
 const uid = () => ++seq;
 /* Space colours. Three stops, not two: at sidebar size a two-stop gradient reads as one flat
    wash, and it is the third stop that makes the column look lit from a corner. `PALETTES` stays
    two-stop for saved state and for code that only knows a pair. */
 const THEMES = [
-  { name: 'Wave', a: '#7fb2c9', b: '#c8d9c0', c: '#9fd3b5' },
+  { name: 'Rainbow', a: '#7fb2c9', b: '#c8d9c0', c: '#9fd3b5' },
   /* Compass is the exception: almost no colour, so the chrome reads as paper. `flat` tells
      applyTheme to stop pretending it has a space colour and to keep the ink dark — a light theme
      that follows the system into dark mode would be light text on a light column. */
@@ -67,7 +67,7 @@ function themeSwatches(current, onpick) {
     },
   })));
 }
-const ICONS = ['🌊', '🪷', '🌿', '🐚', '☀️', '🌙', '📚', '💼', '🎨', '🧪', '🎧', '✈️',
+const ICONS = ['🌈', '🪷', '🌿', '🐚', '☀️', '🌙', '📚', '💼', '🎨', '🧪', '🎧', '✈️',
   '🔥', '💡', '🌱', '🧠', '🎯', '🛠️', '📦', '🫧', '🍀', '🪐', '🧭', '🏗️'];
 
 function seed() {
@@ -81,11 +81,11 @@ function seed() {
   };
   const tabsSeed = {};
   const spaces = [
-    space('Personal', '🌊', PALETTES[0], ['https://en.wikipedia.org/wiki/Wave', 'https://news.ycombinator.com/']),
+    space('Personal', '🌈', PALETTES[0], ['https://en.wikipedia.org/wiki/Rainbow', 'https://news.ycombinator.com/']),
     space('Work', '💼', PALETTES[2], ['https://github.com/']),
   ];
   return {
-    v: 1, onboard: 'pending', spaces, activeSpace: spaces[0].id, tabs: tabsSeed,
+    v: 1, spaces, activeSpace: spaces[0].id, tabs: tabsSeed,
     essentials: [
       { id: uid(), url: 'https://mail.google.com/', title: 'Mail' },
       { id: uid(), url: 'https://calendar.google.com/', title: 'Calendar' },
@@ -94,7 +94,7 @@ function seed() {
     ],
     bookmarks: [], edges: [], history: [], archive: [], boosts: {},
     settings: {
-      mode: 'auto', side: 'left', density: 'comfortable', grain: true, radius: 10, inset: 8, blur: 4, layout: 'sidebar', compact: 'off',
+      mode: 'auto', side: 'left', density: 'comfortable', grain: true, radius: 8, inset: 8, blur: 4, layout: 'sidebar', compact: 'off',
       sideWidth: 248, compactPeek: .5, archiveHours: 12, search: 'google', model: 'claude-opus-5-5', apiKey: '', autoPip: true,
     },
   };
@@ -104,6 +104,8 @@ let state;
 try { state = JSON.parse(localStorage.getItem(KEY)); } catch { state = null; }
 if (!state || state.v !== 1) state = seed();
 state.settings = { ...seed().settings, ...state.settings };
+// Older stores may carry a radius rounder than the window frame; the page follows the frame.
+if (state.settings.radius > 8) state.settings.radius = 8;
 for (const k of ['bookmarks', 'edges', 'history', 'archive', 'downloads']) state[k] ||= [];
 state.boosts ||= {};
 state.profiles ||= [{ id: 'default', name: 'Personal' }];
@@ -231,9 +233,9 @@ const web = { // iframe stand-in for the native shell, so the chrome can be buil
     switch (m.t) {
       case 'open': {
         const el = h('iframe', { src: m.url, hidden: true, allow: 'clipboard-read; clipboard-write; fullscreen' });
-        el.addEventListener('load', () => Wave.recv({ t: 'page', id: m.id, loading: false }));
+        el.addEventListener('load', () => Rainbow.recv({ t: 'page', id: m.id, loading: false }));
         frames[m.id] = el; $('#page').append(el);
-        Wave.recv({ t: 'page', id: m.id, url: m.url, loading: true });
+        Rainbow.recv({ t: 'page', id: m.id, url: m.url, loading: true });
         break;
       }
       case 'layout': {
@@ -245,19 +247,24 @@ const web = { // iframe stand-in for the native shell, so the chrome can be buil
         }
         break;
       }
-      case 'nav': if (f) { f.src = m.url; Wave.recv({ t: 'page', id: m.id, url: m.url, loading: true }); } break;
+      case 'nav': if (f) { f.src = m.url; Rainbow.recv({ t: 'page', id: m.id, url: m.url, loading: true }); } break;
       case 'close': f?.remove(); delete frames[m.id]; break;
       case 'exec': try { f.contentWindow.eval(m.js); } catch { /* cross-origin in the stand-in */ } break;
       case 'eval': {
         let value = null;
         try { value = f.contentWindow.eval(m.js); } catch { value = null; }
-        setTimeout(() => Wave.recv({ t: 'evalResult', req: m.req, value }));
+        setTimeout(() => Rainbow.recv({ t: 'evalResult', req: m.req, value }));
         break;
       }
-      case 'snapshot': setTimeout(() => Wave.recv({ t: 'snapshot', id: m.id, data: standInPage(1) })); break;
+      case 'snapshot': setTimeout(() => Rainbow.recv({ t: 'snapshot', id: m.id, data: standInPage(1) })); break;
       // A full-page shot is the same stand-in, three times taller, so the crop and the fit
       // logic see an image with real proportions.
-      case 'shot': setTimeout(() => Wave.recv({ t: 'shot', id: m.id, data: standInPage(m.full ? 3 : 1) })); break;
+      case 'shot': setTimeout(() => Rainbow.recv({ t: 'shot', id: m.id, data: standInPage(m.full ? 3 : 1) })); break;
+      // The browser stand-in has no recognizer, so it answers with a little text of its own so
+      // the capture-then-attach path can be exercised outside the shell.
+      case 'ocr': setTimeout(() => Rainbow.recv({ t: 'ocrResult', req: m.req, data: { text: 'Stand-in page text, readable after capture.', lines: [] } })); break;
+      // The stand-in has no media folder; keeping the data URL is the correct fallback.
+      case 'media': setTimeout(() => Rainbow.recv({ t: 'mediaSaved', req: m.req, url: null })); break;
     }
   },
 };
@@ -281,6 +288,40 @@ function snapshot(id) {
     send({ t: 'snapshot', id });
     setTimeout(() => { if (shots.get(id) === resolve) { shots.delete(id); resolve(null); } }, 1500);
   });
+}
+/* Read the text out of a captured image. The shell answers with `{ text, lines }` through
+   Windows' own recognizer; the browser stand-in answers with a little sample text so the path can
+   be exercised without the shell. Resolves null on timeout, so a caller can save the capture first
+   and attach the text whenever it arrives. */
+const ocrs = new Map();
+let ocrSeq = 0;
+function ocr(dataUrl) {
+  return new Promise(resolve => {
+    if (!dataUrl) return resolve(null);
+    const req = ++ocrSeq;
+    ocrs.set(req, resolve);
+    // `send` reaches the shell in the app and the stand-in page in a browser, so the same capture
+    // path can be exercised without the shell.
+    send({ t: 'ocr', req, data: dataUrl });
+    setTimeout(() => { if (ocrs.delete(req)) resolve(null); }, 30000);
+  });
+}
+/* Captures are kept as files, not as data URLs in the chrome's store: a full-page screenshot is
+   megabytes, and localStorage has a small quota. Resolves the URL to use, or null to keep the
+   data URL (browser stand-in, or a write that failed). */
+const mediaSaves = new Map();
+let mediaSeq = 0;
+function putMedia(name, data) {
+  return new Promise(resolve => {
+    if (!name || typeof data !== 'string' || !data.startsWith('data:image/')) return resolve(null);
+    const req = ++mediaSeq;
+    mediaSaves.set(req, resolve);
+    send({ t: 'media', op: 'put', req, name, data });
+    setTimeout(() => { if (mediaSaves.delete(req)) resolve(null); }, 8000);
+  });
+}
+function delMedia(name) {
+  if (NATIVE && name) send({ t: 'media', op: 'del', name });
 }
 
 function recv(m) {
@@ -308,7 +349,7 @@ function recv(m) {
       else state.downloads.unshift({ url: m.url, path: m.path, state: m.state, size: m.size, t: Date.now() });
       state.downloads = state.downloads.slice(0, 200);
       if (m.state === 'done') toast('Downloaded ' + (m.path || '').split(/[\\/]/).pop());
-      Wave.library?.refresh(); save();
+      Rainbow.library?.refresh(); save();
       break;
     }
     case 'media': {
@@ -327,7 +368,7 @@ function recv(m) {
     // PiP through activate() and puts the video back in the page.
     case 'pipFocus': if (tab(m.id)) activate(m.id); break;
     case 'peek': openPeek(m.url); break;
-    case 'extensions': (Wave.extensions ||= {})[m.profile] = m; drawExtBar(); Wave.onExtensions?.(); break;
+    case 'extensions': (Rainbow.extensions ||= {})[m.profile] = m; drawExtBar(); Rainbow.onExtensions?.(); break;
     case 'surfaceAct': {
       if (m.act === 'dismiss') { closeSurfaceMenu(); break; }
       const fn = m.act.startsWith('m:') && surfMenu?.acts[+m.act.slice(2)];
@@ -351,6 +392,8 @@ function recv(m) {
     case 'key': onKey({ key: m.key, ctrlKey: true, shiftKey: m.shift, altKey: false, metaKey: false, preventDefault() {} }); break;
     case 'snapshot': { const r = shots.get(m.id); shots.delete(m.id); r?.(m.data); break; }
     case 'shot': { const r = fullShots.get(m.id); fullShots.delete(m.id); r?.(m.data); break; }
+    case 'ocrResult': { const r = ocrs.get(m.req); ocrs.delete(m.req); r?.(m.data); break; }
+    case 'mediaSaved': { const r = mediaSaves.get(m.req); mediaSaves.delete(m.req); r?.(m.url || null); break; }
     case 'evalResult': { const r = waiters.get(m.req); waiters.delete(m.req); r?.(m.value); break; }
   }
 }
@@ -360,7 +403,7 @@ function titleFromFrame(t) {
 }
 function remember(t) {
   if (!/^https?:/.test(t.url)) return;
-  if (state.history[0]?.url !== t.url) Wave.canvas?.touch(t.url);
+  if (state.history[0]?.url !== t.url) Rainbow.canvas?.touch(t.url);
   state.history = [{ url: t.url, title: t.title, t: Date.now() }, ...state.history.filter(x => x.url !== t.url)].slice(0, 1000);
 }
 
@@ -378,7 +421,6 @@ function showPage(id) {
 
 /* The page area: one pane, or two side by side in split view. The shell places each
    tab's native view in its rectangle; the chrome only draws the gap between them. */
-let crop = 0;      // px of the page bottom given to Ask Wave's blurred band
 let panes = [], lastLayout = '', syncQueued = false, splitGap = null;
 /* Layout is coalesced to one pass per frame and skipped when nothing moved, so dragging
    the window edge or the sidebar doesn't flood the shell with identical messages. */
@@ -398,11 +440,11 @@ function pageContextMenu(m) {
   const c = m.ctx, p = panes.find(q => q.id === m.id);
   if (!c || !p) return;
   const items = c.kind === 'image' ? [
-    ['Save image to Canvas', () => Wave.canvas?.capture(c)],
+    ['Save image to Canvas', () => Rainbow.canvas?.capture(c)],
     ['Open image in new tab', () => openTab(c.src)],
     ['Copy image address', () => copyText(c.src, 'Address copied')],
   ] : [
-    ['Save to Canvas', () => Wave.canvas?.capture(c)],
+    ['Save to Canvas', () => Rainbow.canvas?.capture(c)],
     ['Copy', () => copyText(c.text, 'Copied')],
     [`Search the web for “${c.text.slice(0, 22)}${c.text.length > 22 ? '…' : ''}”`, () => openTab(SEARCH[state.settings.search] + encodeURIComponent(c.text.slice(0, 200)))],
   ];
@@ -416,7 +458,7 @@ function doSync() {
   ids.forEach(id => ensureLive(tab(id)));
   const r = $('#pageCard').getBoundingClientRect();
   const x = r.left, w = r.width;
-  const hgt = Math.max(0, r.height - crop), gap = 6, ratio = s.ratio || .5, col = s.splitDir === 'col';
+  const hgt = Math.max(0, r.height), gap = 6, ratio = s.ratio || .5, col = s.splitDir === 'col';
   let heads = [];
   if (ids.length === 2) {
     // Two boxes (a header and a page each), side by side or stacked, with a gap between.
@@ -961,7 +1003,7 @@ function adoptTabs(ids, toId, folder, fromSpaceId) {
 }
 
 function deleteSpace(id) {
-  if (state.spaces.length < 2) return toast('Wave needs at least one space');
+  if (state.spaces.length < 2) return toast('Rainbow needs at least one space');
   const s = state.spaces.find(x => x.id === id);
   for (const t of [...s.pinned, ...s.today]) { if (live.has(t)) { send({ t: 'close', id: t }); live.delete(t); } delete state.tabs[t]; }
   state.spaces = state.spaces.filter(x => x.id !== id);
@@ -987,7 +1029,7 @@ function placeChrome() {
   if (on === toolbarOn && comp === compactOn && cap === capOn && st.side === sideOn) return;
   toolbarOn = on; compactOn = comp; capOn = cap; sideOn = st.side;
   const win = root.dataset.os === 'windows', right = $('#tbRight');
-  // The Wave menu button rides in the compact bar's slot; every other layout keeps it first in the nav.
+  // The Rainbow menu button rides in the compact bar's slot; every other layout keeps it first in the nav.
   if (!comp) $('.nav').prepend($('#appMenuBtn'));
   if (comp) {
     $('#cbNav').append($('.nav'));
@@ -1092,6 +1134,8 @@ const sideCap = () => 420;
 function fitSide() {
   const st = state.settings;
   root.style.setProperty('--side-w', (st.layout === 'rail' ? 58 : Math.min(st.sideWidth, sideCap())) + 'px');
+  // The Essentials row follows the width it is given.
+  setEssCols(state.essentials.length || 1);
 }
 let fitQueued = 0;
 addEventListener('resize', () => { if (!fitQueued) fitQueued = requestAnimationFrame(() => { fitQueued = 0; fitSide(); }); });
@@ -1100,7 +1144,7 @@ addEventListener('resize', () => { if (!fitQueued) fitQueued = requestAnimationF
 function alignNav() {
   const back = $('#back');
   if (!back) return;
-  if (!(root.dataset.os === 'windows' && (state.settings.layout === 'sidebar' || state.settings.layout === 'rail')) || !back.closest('#topbar')) {
+  if (!(root.dataset.os === 'windows' && (state.settings.layout === 'sidebar' || state.settings.layout === 'rail' || state.settings.layout === 'toolbar')) || !back.closest('#topbar')) {
     back.style.marginLeft = '';
     return;
   }
@@ -1118,14 +1162,18 @@ function applyTheme() {
   const flat = !!themeOf(s)?.flat;
   root.dataset.theme = flat ? 'flat' : 'grad';
   const dark = !flat && (st.mode === 'dark' || (st.mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches));
-  // On Windows the backdrop is a neutral Mica, so text follows the mode, not the space colours.
-  root.dataset.ink = flat ? 'dark' : root.dataset.os === 'windows' ? (dark ? 'light' : 'dark') : (lum(s.a) + lum(s.b)) / 2 < .22 ? 'light' : 'dark';
+  // The shell is the space's own gradient on every platform now, so contrast comes from the
+  // colours behind the text, not from the system mode: light space -> dark ink, dark space ->
+  // light ink. A flat paper theme is always dark ink.
+  root.dataset.ink = flat ? 'dark' : (lum(s.a) + lum(s.b) + lum(s.c || s.b)) / 3 < .22 ? 'light' : 'dark';
   root.dataset.mode = dark ? 'dark' : 'light';
   root.dataset.side = st.side;
   root.dataset.density = st.density;
   root.dataset.layout = st.layout;
   root.dataset.grain = st.grain ? 'on' : 'off';
-  root.style.setProperty('--radius', st.radius + 'px');
+  // The page follows the window frame. 8 px is the Windows 11 frame; the setting may only make
+  // the corners less round, never rounder than the frame they sit inside.
+  root.style.setProperty('--radius', Math.max(0, Math.min(8, st.radius || 0)) + 'px');
   root.style.setProperty('--inset', st.inset + 'px');
   root.style.setProperty('--blur', st.blur + 'px');
   fitSide();
@@ -1158,7 +1206,7 @@ function applyBoost(t) {
   const b = state.boosts[hostOf(t.url)];
   if (!b || !live.has(t.id)) return;
   const css = b.on ? boostCss(b) : '';
-  send({ t: 'exec', id: t.id, js: `(()=>{let s=document.getElementById('wave-boost');if(!s){s=document.createElement('style');s.id='wave-boost';document.documentElement.appendChild(s)}s.textContent=${JSON.stringify(css)}})()` });
+  send({ t: 'exec', id: t.id, js: `(()=>{let s=document.getElementById('rainbow-boost');if(!s){s=document.createElement('style');s.id='rainbow-boost';document.documentElement.appendChild(s)}s.textContent=${JSON.stringify(css)}})()` });
   if (b.on && b.js) send({ t: 'exec', id: t.id, js: b.js });
 }
 function setBoost(domain, patch) {
@@ -1209,7 +1257,7 @@ function tabRow(t, section) {
     ondblclick: () => rename(li, t),
     onkeydown: e => { if (e.key === 'Enter') activate(t.id); if (e.key === 'Delete') closeTab(t.id); },
     oncontextmenu: e => { e.preventDefault(); tabMenu(t, e.clientX, e.clientY); },
-    ondragstart: e => { dragId = t.id; e.dataTransfer.setData('wave/tab', t.id); e.dataTransfer.setData('text/uri-list', t.url); li.classList.add('dragging'); },
+    ondragstart: e => { dragId = t.id; e.dataTransfer.setData('rainbow/tab', t.id); e.dataTransfer.setData('text/uri-list', t.url); li.classList.add('dragging'); },
     ondragend: () => { dragId = 0; hideEssGhost(); li.classList.remove('dragging'); },
   },
   favicon(t.url),
@@ -1243,7 +1291,7 @@ function insideFolder(s, f, target) { // would putting f into target make a loop
 function dropInFolder(e, f) {
   e.preventDefault(); e.stopPropagation();
   e.currentTarget.classList.remove('drop-target');
-  const s = space(), fid = +e.dataTransfer.getData('wave/folder'), id = +e.dataTransfer.getData('wave/tab');
+  const s = space(), fid = +e.dataTransfer.getData('rainbow/folder'), id = +e.dataTransfer.getData('rainbow/tab');
   if (fid) { const g = s.folders.find(x => x.id === fid); if (g && !insideFolder(s, g, f.id)) g.parent = f.id; }
   else if (id && tab(id) && !tab(id).ess) { if (!s.pinned.includes(id)) pinTab(id, true); tab(id).folder = f.id; }
   f.open = true;
@@ -1262,13 +1310,13 @@ function folderRow(s, f, kids) {
         ['New folder inside', () => newFolder(f.id)],
         ['Rename', () => rename(li.firstChild, f, 'name')],
         '-', ['Delete folder (keeps its tabs)', () => deleteFolder(s, f), 'danger']]); },
-      ondragstart: e => { e.stopPropagation(); e.dataTransfer.setData('wave/folder', f.id); },
-      ondragover: e => { if (e.dataTransfer.types.some(x => x === 'wave/tab' || x === 'wave/folder')) { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('drop-target'); } },
+      ondragstart: e => { e.stopPropagation(); e.dataTransfer.setData('rainbow/folder', f.id); },
+      ondragover: e => { if (e.dataTransfer.types.some(x => x === 'rainbow/tab' || x === 'rainbow/folder')) { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('drop-target'); } },
       ondragleave: e => e.currentTarget.classList.remove('drop-target'),
       ondrop: e => dropInFolder(e, f),
     }, h('span', { class: 'fav folder-ico', innerHTML: ico_folder }), h('span', { class: 'title' }, f.name), h('span', { class: 'chev' }, '›')),
     f.open && kids.length ? h('ul', { class: 'tab-list sub',
-      ondragover: e => { if (e.dataTransfer.types.includes('wave/tab')) { e.preventDefault(); e.stopPropagation(); } },
+      ondragover: e => { if (e.dataTransfer.types.includes('rainbow/tab')) { e.preventDefault(); e.stopPropagation(); } },
       ondrop: e => dropInFolder(e, f) }, kids) : null);
   return li;
 }
@@ -1332,7 +1380,7 @@ function render() {
       onclick: () => openEssential(e),
       oncontextmenu: ev => { ev.preventDefault(); menu(ev.clientX, ev.clientY, [
         ['Open', () => openEssential(e)], ['Copy link', () => copyText(e.url, 'Link copied')],
-        ['Save to Canvas', () => Wave.canvas?.saveUrl(e.url, e.title)], '-',
+        ['Save to Canvas', () => Rainbow.canvas?.saveUrl(e.url, e.title)], '-',
         ['Remove from Essentials', () => removeEssential(e.id), 'danger']]); },
     }, favicon(e.url, 20));
   }) : [essZone()]));
@@ -1524,7 +1572,7 @@ function tabMenu(t, x, y) {
   menu(x, y, [
     [pinned ? 'Unpin' : 'Pin tab', () => pinTab(t.id, !pinned), '', 'Ctrl+Shift+D'],
     ['Add to Essentials', () => { addEssential(t.url, t.title); }],
-    ['Save to Canvas', () => Wave.canvas?.saveTab(t.id), '', 'Ctrl+D'],
+    ['Save to Canvas', () => Rainbow.canvas?.saveTab(t.id), '', 'Ctrl+D'],
     ['Rename', () => { const li = document.querySelector(`.tab[data-id="${t.id}"]`); if (li) rename(li, t); }],
     ['Copy link', () => copyText(t.url, 'Link copied')],
     ['Duplicate', () => openTab(t.url)],
@@ -1632,7 +1680,7 @@ function frameMenu(x, y) {
   ]);
 }
 
-/* New Tab, the way Arc shows its containers: the profiles this Wave knows, then the ways
+/* New Tab, the way Arc shows its containers: the profiles this Rainbow knows, then the ways
    to add or edit one. A profile needs a space to open a tab into. */
 function newTabInProfile(p) {
   const s = state.spaces.find(x => x.profile === p.id);
@@ -1665,7 +1713,7 @@ function linkMenu(x, y) {
     ['Copy as Markdown', () => copyText(`[${t.custom || t.title || t.url}](${t.url})`, 'Markdown copied')],
     '-',
     ['Add to Essentials', () => addEssential(t.url, t.title)],
-    ['Save to Canvas', () => Wave.canvas?.saveTab(t.id), '', 'Ctrl+D'],
+    ['Save to Canvas', () => Rainbow.canvas?.saveTab(t.id), '', 'Ctrl+D'],
     s.split ? null : ['Open in split view', () => { const nt = openTab(t.url, { focus: false }); if (nt) splitWith(t.id, nt.id, 'right'); }],
     '-',
     ['Boost this site', openBoost, state.boosts[hostOf(t.url)]?.on ? 'check' : ''],
@@ -1837,9 +1885,13 @@ async function shotCrop(sel) {
 async function shotSave(data) {
   if (!data) return toast('Could not capture the image');
   const t = activeTab();
-  const b = Wave.canvas?.add({ kind: 'image', image: data, title: t ? (t.custom || t.title || hostOf(t.url)) : 'Screenshot' });
+  // Saved first, read and sorted after: the screenshot must survive even when OCR is unavailable.
+  const b = Rainbow.canvas?.add({ kind: 'image', image: data, title: t ? (t.custom || t.title || hostOf(t.url)) : 'Screenshot',
+    url: t?.url || null, sourceUrl: t?.url || null, created: Date.now() });
   closeShotTool();
-  if (b) toast('Screenshot saved to Canvas');
+  if (!b) return;
+  toast('Screenshot saved to Canvas');
+  Rainbow.canvas?.enrich?.(b.id, data);
 }
 /* Stored shots are capped: a full page at full size is megabytes of localStorage. */
 function fitShot(src, max = 1400) {
@@ -1896,8 +1948,8 @@ const profileId = () => space().profile || 'default';
 function drawExtBar() {
   const bar = $('#extBar');
   if (!bar) return;
-  const pid = profileId(), info = Wave.extensions?.[pid];
-  if (NATIVE && !info) { if (!(Wave.extAsked ||= {})[pid]) { Wave.extAsked[pid] = 1; send({ t: 'extensions', profile: pid }); } }
+  const pid = profileId(), info = Rainbow.extensions?.[pid];
+  if (NATIVE && !info) { if (!(Rainbow.extAsked ||= {})[pid]) { Rainbow.extAsked[pid] = 1; send({ t: 'extensions', profile: pid }); } }
   const pins = state.extPins[pid] || [];
   bar.replaceChildren(...pins.map(id => info?.items.find(x => x.id === id)).filter(Boolean).map(x =>
     h('button', { class: 'ext-pin', title: x.name, 'aria-label': x.name,
@@ -1913,7 +1965,7 @@ function toast(text) {
 
 /* Overlays: the page is a native view the chrome cannot draw over or blur, so take a
    snapshot of it, hide it, and blur the snapshot instead. */
-/* 'low' (Ask Wave) blurs only a band along the bottom of the window: the page above it
+/* 'low' (Ask Rainbow) blurs only a band along the bottom of the window: the page above it
    stays live and is shortened to end where the band starts. */
 let overlayDepth = 0, veilMode = 'full';
 let veilHide = 0;
@@ -1934,7 +1986,7 @@ async function veilOn(mode = 'full') {
   veil.hidden = false;
   send({ t: 'overlay', on: true });
 }
-/* Ask Wave's wash. The page stays live and keeps its size. The chrome is lifted over a band along the
+/* Ask Rainbow's wash. The page stays live and keeps its size. The chrome is lifted over a band along the
    bottom of the window, and there it draws a sharp picture of the page (so the seam cannot be seen)
    with a blurred copy fading in over it, thicker towards the bottom. */
 async function washOn(veil) {
@@ -2017,21 +2069,59 @@ function openSpaceSettings(s = space()) {
 
 /* Settings is a page with a left rail of sections, with its own left rail. */
 const SETTINGS_SECTIONS = [['look', 'Look and Feel'], ['tabs', 'Tabs and browsing'], ['profiles', 'Spaces and profiles'], ['mods', 'Extensions and themes'],
-  ['ask', 'Ask Wave'], ['models', 'On-device models'], ['keys', 'Keyboard shortcuts'], ['data', 'Data']];
+  ['ask', 'Ask Rainbow'], ['models', 'On-device models'], ['keys', 'Keyboard shortcuts'], ['data', 'Data']];
 const heading = t => h('h3', { class: 'set-h' }, t);
 function openSettings(section = 'look') {
   const st = state.settings;
+  // Settings is a page in the web frame, so it uses the page's own ink and lines rather than the
+  // floating panel's glass tokens.
+  const host = $('#settingsView');
+  const closeSettings = () => setView('page');
+  if (view === 'settings') { closeMenu(); closeCmd(); closePanel(); closeSitePop(); } else closeAll();
+  // A floating peek is a page view above the chrome; settings owns the frame now.
+  if (peek) closePeek();
   const set = (k, v) => { st[k] = v; applyTheme(); render(); save(); };
   const body = h('div', { class: 'set-body' });
   const nav = h('nav', { class: 'set-nav', 'aria-label': 'Settings sections' });
-  const layoutCard = (id, name) => h('button', { class: `layout-card${st.layout === id ? ' on' : ''}`, 'aria-pressed': String(st.layout === id),
-    onclick: () => { set('layout', id); draw(); } },
+  const LAYOUT_IDS = ['sidebar', 'toolbar', 'rail', 'compact'];
+  // Choosing Compact with no compact target picked should hide the sidebar, not leave the
+  // layout "compact" and the sub-control saying "Off". Remember what was there so Off returns.
+  function pickLayout(id, focus = false) {
+    if (id === 'compact') {
+      if (st.layout !== 'compact') st.preCompact = st.layout;
+      if ((st.compact || 'off') === 'off') st.compact = 'sidebar';
+    }
+    set('layout', id); draw();
+    if (focus) host.querySelector(`.layout-card[data-layout="${id}"]`)?.focus();
+  }
+  // A radio group, like Yalqen's ChoiceCards: arrow keys move the choice and the focus together.
+  const layoutCard = (id, name) => h('button', {
+    class: `layout-card${st.layout === id ? ' on' : ''}`, 'data-layout': id,
+    role: 'radio', 'aria-checked': String(st.layout === id), tabindex: st.layout === id ? '0' : '-1',
+    onclick: () => pickLayout(id),
+    onkeydown: e => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      pickLayout(LAYOUT_IDS[(LAYOUT_IDS.indexOf(id) + step + LAYOUT_IDS.length) % LAYOUT_IDS.length], true);
+    },
+  },
     h('div', { class: `art ${id}` }, h('i', { class: 'top' }), h('i', { class: 'bar' }), h('i', { class: 'page' })), h('span', {}, name));
   const pages = {
     look: () => [
       heading('Browser layout'),
-      h('div', { class: 'layout-cards' }, layoutCard('sidebar', 'Only Sidebar'), layoutCard('toolbar', 'Sidebar and Top Toolbar'), layoutCard('rail', 'Collapsed Sidebar'), layoutCard('compact', 'Compact')),
-      field('Compact mode', seg([['off', 'Off'], ['sidebar', 'Hide sidebar'], ['toolbar', 'Hide toolbar'], ['both', 'Hide both']], st.compact || 'off', v => { st.compact = v; setLayout(v === 'off' ? 'sidebar' : 'compact'); syncCompactSidebar(); })),
+      h('div', { class: 'layout-cards', role: 'radiogroup', 'aria-label': 'Browser layout' }, layoutCard('sidebar', 'Only Sidebar'), layoutCard('toolbar', 'Sidebar and Top Toolbar'), layoutCard('rail', 'Collapsed Sidebar'), layoutCard('compact', 'Compact')),
+      // Off returns to the layout you had, instead of always forcing Only Sidebar.
+      field('Compact mode', seg([['off', 'Off'], ['sidebar', 'Hide sidebar'], ['toolbar', 'Hide toolbar'], ['both', 'Hide both']], st.compact || 'off', v => {
+        st.compact = v;
+        if (v === 'off') {
+          if (st.layout === 'compact') setLayout(st.preCompact || 'sidebar');
+        } else {
+          if (st.layout !== 'compact') st.preCompact = st.layout;
+          setLayout('compact');
+        }
+        syncCompactSidebar();
+      })),
       heading('Space theme'),
       field('Theme', h('div', { class: 'theme-field' },
         themeSwatches(space(), t => { const s = space(); s.a = t.a; s.b = t.b; s.c = t.c; applyTheme(); render(); save(); draw(); }),
@@ -2041,7 +2131,8 @@ function openSettings(section = 'look') {
       field('Sidebar', seg([['left', 'Left'], ['right', 'Right']], st.side, v => set('side', v))),
       field('Density', seg([['comfortable', 'Comfortable'], ['compact', 'Compact']], st.density, v => set('density', v))),
       field('Paper grain', seg([[true, 'On'], [false, 'Off']], st.grain, v => set('grain', v))),
-      field('Corner radius', range(st.radius, 0, 20, v => set('radius', v))),
+      field('Corner radius', range(st.radius, 0, 8, v => set('radius', v))),
+      h('p', { class: 'hint' }, 'The app frame is 8 px; the page never goes rounder than the frame it sits inside.'),
       field('Page margin', range(st.inset, 0, 20, v => set('inset', v))),
       field('Overlay blur', range(st.blur, 0, 60, v => set('blur', v))),
       h('p', { class: 'hint' }, 'To change a space’s name, icon or colours, right-click it.'),
@@ -2072,17 +2163,17 @@ function openSettings(section = 'look') {
         h('button', { class: 'btn primary', onclick: () => { state.profiles.push({ id: 'p' + uid(), name: 'New Profile' }); save(); draw(); } }, 'Add a new Profile')),
     ],
     mods: () => {
-      Wave.onExtensions = () => { if (section === 'mods') draw(); };
-      if (NATIVE) for (const p of state.profiles) if (!Wave.extensions?.[p.id]) send({ t: 'extensions', profile: p.id });
+      Rainbow.onExtensions = () => { if (section === 'mods') draw(); };
+      if (NATIVE) for (const p of state.profiles) if (!Rainbow.extensions?.[p.id]) send({ t: 'extensions', profile: p.id });
       return [
         heading('Themes'),
         themeSwatches(space(), t => { const s = space(); s.a = t.a; s.b = t.b; s.c = t.c; applyTheme(); save(); draw(); }),
         h('p', { class: 'hint' }, `Colours apply to the current space (${space().name}). Mode, radius and blur are in Look and Feel.`),
         heading('Extensions'),
         NATIVE ? [
-          h('p', { class: 'hint' }, 'Extensions belong to a profile. Unpack one into its own folder inside that profile’s folder, then restart Wave. Pin the ones you want next to the address bar.'),
+          h('p', { class: 'hint' }, 'Extensions belong to a profile. Unpack one into its own folder inside that profile’s folder, then restart Rainbow. Pin the ones you want next to the address bar.'),
           ...state.profiles.flatMap(p => {
-            const info = Wave.extensions?.[p.id], pins = state.extPins[p.id] ||= [];
+            const info = Rainbow.extensions?.[p.id], pins = state.extPins[p.id] ||= [];
             return [
               h('div', { class: 'profile-row' }, h('strong', {}, p.name),
                 h('span', { class: 'hint' }, info?.dir || '…'),
@@ -2094,23 +2185,23 @@ function openSettings(section = 'look') {
                   pins.includes(x.id) ? 'Unpin' : 'Pin'))) : [h('p', { class: 'hint' }, 'No extensions installed.')]),
             ];
           }),
-        ] : h('p', { class: 'hint' }, 'Extensions load in the Wave app.'),
+        ] : h('p', { class: 'hint' }, 'Extensions load in the Rainbow app.'),
         heading('Boosts'),
         h('p', { class: 'hint' }, 'Per-site styling and scripts live in Boosts: press the star in the address bar.'),
       ];
     },
     ask: () => [
-      heading('Ask Wave'),
+      heading('Ask Rainbow'),
       field('Anthropic API key', h('input', { type: 'password', value: st.apiKey, placeholder: 'sk-ant-…', autocomplete: 'off', oninput: e => { st.apiKey = e.target.value.trim(); save(); } })),
-      h('p', { class: 'hint' }, 'Ask Wave opens with Ctrl+E. The key is kept on this device and sent only to api.anthropic.com. Without a key, the built-in model still runs simple commands.'),
+      h('p', { class: 'hint' }, 'Ask Rainbow opens with Ctrl+E. The key is kept on this device and sent only to api.anthropic.com. Without a key, the built-in model still runs simple commands.'),
     ],
     models: () => {
-      Wave.onModels = () => { if (section === 'models') draw(); };
-      const [rows, mode] = Wave.modelsPage();
+      Rainbow.onModels = () => { if (section === 'models') draw(); };
+      const [rows, mode] = Rainbow.modelsPage();
       return [
         heading('On-device models'),
-        h('p', { class: 'hint' }, 'Small models that run on this machine to sort your Canvas and to make quick decisions for Ask Wave. Installing downloads a model once from its public host; every decision after that stays here.'),
-        field('Use', seg([['both', 'Both together'], ['sorter', 'Sorter'], ['decider', 'Decider'], ['off', 'Off']], mode, v => { Wave.setModelMode(v); })),
+        h('p', { class: 'hint' }, 'Small models that run on this machine to sort your Canvas and to make quick decisions for Ask Rainbow. Installing downloads a model once from its public host; every decision after that stays here.'),
+        field('Use', seg([['both', 'Both together'], ['sorter', 'Sorter'], ['decider', 'Decider'], ['off', 'Off']], mode, v => { Rainbow.setModelMode(v); })),
         ...rows,
         h('p', { class: 'hint' }, 'Together, the Sorter answers when it is sure and hands close calls to the Decider.'),
       ];
@@ -2121,25 +2212,33 @@ function openSettings(section = 'look') {
       h('div', { class: 'row-btns', style: 'justify-content:flex-start' },
         h('button', { class: 'btn', onclick: exportData }, 'Export…'),
         h('button', { class: 'btn', onclick: importData }, 'Import…'),
-        h('button', { class: 'btn', onclick: () => openArchive() }, 'Archive'),
-        h('button', { class: 'btn', onclick: () => { closePanel(); setTimeout(() => Wave.onboard?.('smooth'), 200); } }, 'Replay welcome'),
-        h('button', { class: 'btn', onclick: () => { closePanel(); setTimeout(() => Wave.onboard?.('pixel'), 200); } }, 'Replay pixel welcome')),
-      field('First-run welcome', seg([['smooth', 'Smooth'], ['pixel', 'Pixel'], ['both', 'Both']], st.welcome || 'smooth', v => set('welcome', v))),
+        h('button', { class: 'btn', onclick: () => openArchive() }, 'Archive')),
     ],
   };
   function draw() {
     nav.replaceChildren(...SETTINGS_SECTIONS.map(([id, name]) => h('button', { class: id === section ? 'on' : '', 'aria-current': id === section ? 'page' : null,
       onclick: () => { section = id; draw(); } }, name)));
     body.replaceChildren(...[].concat(pages[section]()).flat());
+    const current = SETTINGS_SECTIONS.find(x => x[0] === section);
+    title.textContent = current ? current[1] : 'Settings';
   }
-  panel('Settings', () => h('div', { class: 'set-page' }, nav, body));
-  $('#panel').classList.add('wide');
+  const title = h('h1', { class: 'set-title' }, 'Settings');
+  const back = { innerHTML: '<svg viewBox="0 0 16 16"><path d="M9.5 3.5 5 8l4.5 4.5"/></svg>' };
+  const cross = { innerHTML: '<svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg>' };
+  host.replaceChildren(h('div', { class: 'set-shell' },
+    h('header', { class: 'set-top' },
+      h('button', { class: 'icon-btn', 'aria-label': 'Back to the page', title: 'Back to the page', onclick: closeSettings, ...back }),
+      title,
+      h('button', { class: 'icon-btn', 'aria-label': 'Close settings', title: 'Close settings', onclick: closeSettings, ...cross })),
+    h('div', { class: 'set-page' }, nav, body)));
   draw();
+  setView('settings');
+  host.scrollTop = 0;
 }
 
 function exportData() {
   const copy = { ...state, settings: { ...state.settings, apiKey: '' } };
-  const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(copy, null, 1)], { type: 'application/json' })), download: 'wave-export.json' });
+  const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(copy, null, 1)], { type: 'application/json' })), download: 'rainbow-export.json' });
   a.click();
 }
 function importData() {
@@ -2147,7 +2246,7 @@ function importData() {
   input.onchange = async () => {
     try {
       const next = JSON.parse(await input.files[0].text());
-      if (next.v !== 1 || !Array.isArray(next.spaces)) throw new Error('not a Wave export');
+      if (next.v !== 1 || !Array.isArray(next.spaces)) throw new Error('not a Rainbow export');
       next.settings.apiKey = state.settings.apiKey;
       for (const id of live) send({ t: 'close', id });
       live.clear();
@@ -2163,7 +2262,7 @@ function openArchive() {
     ? state.archive.slice(0, 120).map(a => h('button', { class: 'btn', style: 'display:flex;gap:10px;align-items:center;text-align:left;font-weight:400',
         onclick: () => { closePanel(); openTab(a.url); } }, favicon(a.url), h('span', { style: 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, a.title || a.url),
         h('small', { class: 'hint' }, new Date(a.t).toLocaleDateString())))
-    : h('p', { class: 'hint' }, 'Tabs you close, and Today tabs Wave archives, land here.'));
+    : h('p', { class: 'hint' }, 'Tabs you close, and Today tabs Rainbow archives, land here.'));
 }
 
 function openBoost() {
@@ -2197,10 +2296,10 @@ function appMenu(x, y) {
     '-',
     t ? ['Split view', () => setTimeout(() => splitMenu(t.id, x, y))] : null,
     ['Canvas', () => setView('canvas'), '', 'Ctrl+Shift+K'],
-    ['Ask Wave', () => Wave.ask?.open(), '', 'Ctrl+E'],
-    ['Library', () => Wave.library?.open('spaces')],
-    ['History', () => Wave.library?.open('history')],
-    ['Downloads', () => Wave.library?.open('downloads')],
+    ['Ask Rainbow', () => Rainbow.ask?.open(), '', 'Ctrl+E'],
+    ['Library', () => Rainbow.library?.open('spaces')],
+    ['History', () => Rainbow.library?.open('history')],
+    ['Downloads', () => Rainbow.library?.open('downloads')],
     '-',
     t ? ['Boost this site', openBoost, '', 'Ctrl+B'] : null,
     t ? ['Print…', () => send({ t: 'exec', id: t.id, js: 'print()' })] : null,
@@ -2216,7 +2315,7 @@ function appMenu(x, y) {
 function shortcutRows() {
   const rows = [['Shift+Click', 'Peek a link'], ['Ctrl+T', 'New tab or search'], ['Ctrl+L', 'Edit address'], ['Ctrl+W', 'Close tab'], ['Ctrl+Shift+T', 'Reopen closed tab'],
     ['Ctrl+Tab', 'Next tab'], ['Ctrl+1…9', 'Go to space'], ['Ctrl+S', 'Show or hide sidebar'], ['Ctrl+D', 'Save to Canvas'],
-    ['Ctrl+Shift+D', 'Pin or unpin'], ['Ctrl+Shift+K', 'Canvas'], ['Ctrl+E', 'Ask Wave'], ['Ctrl+B', 'Boost this site'],
+    ['Ctrl+Shift+D', 'Pin or unpin'], ['Ctrl+Shift+K', 'Canvas'], ['Ctrl+E', 'Ask Rainbow'], ['Ctrl+B', 'Boost this site'],
     ['Ctrl+[ / ]', 'Back / forward'], ['Ctrl+R', 'Reload'], ['Ctrl+,', 'Settings']];
   return rows.map(([k, d]) => h('div', { class: 'field' }, h('span', {}, d), h('kbd', {}, k)));
 }
@@ -2227,12 +2326,12 @@ function openShortcuts() { openSettings('keys'); }
 const ACTIONS = [
   ['New space', () => newSpace(), '＋'],
   ['Open Canvas', () => setView('canvas'), '▦'],
-  ['Ask Wave', () => Wave.ask?.open(), '✦'],
+  ['Ask Rainbow', () => Rainbow.ask?.open(), '✦'],
   ['Toggle sidebar', () => toggleSidebar(), '⇤'],
   ['Settings', () => openSettings(), '⚙'],
   ['Boost this site', () => openBoost(), '★'],
   ['Pin or unpin this tab', () => activeTab() && pinTab(activeTab().id, !activeTab().home), '📌'],
-  ['Save this page to Canvas', () => Wave.canvas?.saveTab(space().active), '🔖'],
+  ['Save this page to Canvas', () => Rainbow.canvas?.saveTab(space().active), '🔖'],
   ['Clear Today tabs', () => clearToday(), '✕'],
   ['Reopen closed tab', () => reopenClosed(), '↺'],
   ['Archive', () => openArchive(), '🗄'],
@@ -2357,7 +2456,7 @@ function cmdUpdate() {
     }
   }
   for (const [label, run, glyph] of ACTIONS) if (!scope && (q ? match(label) : items.length < 9)) items.push({ kind: 'cmd', glyph, label, meta: 'Command', run });
-  if (q && !scope && /^ask\b|\?$/.test(q)) items.splice(1, 0, { kind: 'ask', glyph: '✦', label: `Ask Wave: ${text}`, meta: 'Ctrl+E', run: () => Wave.ask?.open(text.replace(/^ask\s*/i, '')) });
+  if (q && !scope && /^ask\b|\?$/.test(q)) items.splice(1, 0, { kind: 'ask', glyph: '✦', label: `Ask Rainbow: ${text}`, meta: 'Ctrl+E', run: () => Rainbow.ask?.open(text.replace(/^ask\s*/i, '')) });
   cmdItems = items.slice(0, 12); cmdSel = 0;
   $('#cmdResults').replaceChildren(...cmdItems.map((it, i) => h('li', {
     class: (i === cmdSel ? 'sel ' : '') + 'k-' + it.kind, role: 'option', 'aria-selected': String(i === cmdSel),
@@ -2398,9 +2497,10 @@ $('#cmdInput').addEventListener('keydown', e => {
 function setView(v) {
   view = v;
   $('#canvasView').hidden = v !== 'canvas';
+  $('#settingsView').hidden = v !== 'settings';
   $('#page').hidden = v !== 'page';
   syncPage();
-  if (v === 'canvas') Wave.canvas?.show(); else Wave.canvas?.hide?.();
+  if (v === 'canvas') Rainbow.canvas?.show(); else Rainbow.canvas?.hide?.();
   render();
 }
 function toggleSidebar() {
@@ -2427,7 +2527,13 @@ function toggleSidebar() {
 new ResizeObserver(syncPage).observe($('#pageCard'));
 $('#app').addEventListener('transitionend', syncPage);
 
-function closeAll() { closeMenu(); closeCmd(); closePanel(); closeNewSpace(); closeSitePop(); closeShotTool(); Wave.ask?.close(); closeNowPlaying(); closeRecents(); }
+function closeAll() {
+  closeMenu(); closeCmd(); closePanel(); closeNewSpace(); closeSitePop(); closeShotTool();
+  Rainbow.ask?.close(); closeNowPlaying(); closeRecents();
+  // Settings is a view in the page frame, not an overlay: Escape and the other overlays must
+  // still be able to leave it.
+  if (view === 'settings') setView('page');
+}
 
 /* ---------------- input ---------------- */
 
@@ -2448,11 +2554,11 @@ function onKey(e) {
   if (k === 's' && e.shiftKey) return run(openShotTool);
   if (k === 's') return run(toggleSidebar);
   if (k === 'd' && e.shiftKey) return run(() => t && pinTab(t.id, !t.home));
-  if (k === 'd') return run(() => t && Wave.canvas?.saveTab(t.id));
-  if (k === 'e') return run(() => (Wave.ask?.isOpen() ? Wave.ask.close() : Wave.ask?.open()));
+  if (k === 'd') return run(() => t && Rainbow.canvas?.saveTab(t.id));
+  if (k === 'e') return run(() => (Rainbow.ask?.isOpen() ? Rainbow.ask.close() : Rainbow.ask?.open()));
   if (k === 'k' && e.shiftKey) return run(() => setView(view === 'canvas' ? 'page' : 'canvas'));
   if (k === 'b') return run(openBoost);
-  if (k === ',') return run(() => openSettings());
+  if (k === ',') return run(() => (view === 'settings' ? setView('page') : openSettings()));
   if (k === '[' && t) return run(() => send({ t: 'exec', id: t.id, js: 'history.back()' }));
   if (k === ']' && t) return run(() => send({ t: 'exec', id: t.id, js: 'history.forward()' }));
   if (k === 'Tab') return run(() => cycleTab(e.shiftKey ? -1 : 1));
@@ -2490,7 +2596,7 @@ $('#reload').onclick = () => activeTab() && send({ t: 'exec', id: activeTab().id
 $('#newSpaceBtn').onclick = e => newItemMenu(e.currentTarget);
 $('#spaceName').onclick = e => spaceMenu(space(), e.clientX, e.clientY + 8);
 $('#spaceMenuBtn').onclick = e => spaceMenu(space(), e.clientX, e.clientY + 8);
-$('#saveBtn').onclick = () => activeTab() && Wave.canvas?.saveTab(activeTab().id);
+$('#saveBtn').onclick = () => activeTab() && Rainbow.canvas?.saveTab(activeTab().id);
 $('#canvasBtn').onclick = () => { closeRecents(); setView(view === 'canvas' ? 'page' : 'canvas'); };
 $('#panelClose').onclick = closePanel;
 $('#veil').onclick = closeAll;
@@ -2657,15 +2763,20 @@ document.addEventListener('contextmenu', e => {
 
 /* drag and drop: reorder, pin by dropping in Pinned, Essentials, other spaces, Canvas */
 const ESS_MAX = 12;
+/* How many tiles fit across the sidebar at its current width: four when there is room, three in
+   the middle, two when it is squeezed. The count is recomputed by fitSide() as the sidebar is
+   dragged, so the row reflows instead of shrinking the tiles forever. */
 function essCols(n) {
   if (n <= 1) return 1;
-  const rows = Math.min(3, Math.ceil(n / 4));
-  return Math.min(4, Math.ceil(n / rows)); // 4 per row at most; 3 rows at most
+  const w = Math.min(state.settings.sideWidth, sideCap());
+  const cap = w < 220 ? 2 : w < 300 ? 3 : 4;
+  return Math.max(1, Math.min(cap, n));
 }
 function setEssCols(n) {
-  const box = $('#essentials'), cols = essCols(n);
-  box.style.setProperty('--cols', cols);
-  box.style.setProperty('--ess-r', Math.min(23, 6 + cols * 3) + 'px');
+  const box = $('#essentials');
+  if (!box) return;
+  box.style.setProperty('--cols', essCols(n));
+  box.style.setProperty('--ess-r', 'var(--radius)');
 }
 let dragId = 0, essGhost = null, essGhostFor = 0;
 function hideEssGhost() {
@@ -2700,12 +2811,12 @@ function dropIndex(list, y) {
 }
 // A folder dragged back out to the top of Pinned.
 $('#pinnedList').addEventListener('drop', e => {
-  const fid = +e.dataTransfer.getData('wave/folder'), f = space().folders.find(x => x.id === fid);
+  const fid = +e.dataTransfer.getData('rainbow/folder'), f = space().folders.find(x => x.id === fid);
   if (f) { f.parent = null; render(); save(); }
 });
 for (const list of [$('#pinnedList'), $('#todayList')]) {
   list.addEventListener('dragover', e => {
-    if (!e.dataTransfer.types.some(x => x === 'wave/tab' || x === 'text/uri-list' || (x === 'wave/folder' && list.id === 'pinnedList'))) return;
+    if (!e.dataTransfer.types.some(x => x === 'rainbow/tab' || x === 'text/uri-list' || (x === 'rainbow/folder' && list.id === 'pinnedList'))) return;
     e.preventDefault();
     list.classList.add('drop-target');
   });
@@ -2713,7 +2824,7 @@ for (const list of [$('#pinnedList'), $('#todayList')]) {
   list.addEventListener('drop', e => {
     e.preventDefault();
     list.classList.remove('drop-target');
-    const id = +e.dataTransfer.getData('wave/tab');
+    const id = +e.dataTransfer.getData('rainbow/tab');
     const pinned = list.dataset.section === 'pinned';
     if (id && tab(id)) {
       const t = tab(id);
@@ -2738,23 +2849,23 @@ essWrap.addEventListener('dragleave', e => { if (!essWrap.contains(e.relatedTarg
 $('#essentials').addEventListener('drop', e => {
   e.preventDefault();
   hideEssGhost();
-  const t = tab(+e.dataTransfer.getData('wave/tab'));
+  const t = tab(+e.dataTransfer.getData('rainbow/tab'));
   if (t && !t.ess) { addEssential(t.home || t.url, t.custom || t.title); if (!t.home) closeTab(t.id); }
 });
 $('#urlPill').addEventListener('dragover', e => e.preventDefault()); // drop target for an empty Essentials row
-$('#urlPill').addEventListener('drop', e => { e.preventDefault(); const t = tab(+e.dataTransfer.getData('wave/tab')); if (t && !state.essentials.length) addEssential(t.url, t.title); });
+$('#urlPill').addEventListener('drop', e => { e.preventDefault(); const t = tab(+e.dataTransfer.getData('rainbow/tab')); if (t && !state.essentials.length) addEssential(t.url, t.title); });
 $('#spaceDots').addEventListener('dragover', e => { if (e.target.closest('.dot')) e.preventDefault(); });
 $('#spaceDots').addEventListener('drop', e => {
-  const dot = e.target.closest('.dot'), id = +e.dataTransfer.getData('wave/tab');
+  const dot = e.target.closest('.dot'), id = +e.dataTransfer.getData('rainbow/tab');
   if (dot && id) { e.preventDefault(); moveTabToSpace(id, +dot.dataset.space); toast('Moved'); }
 });
 $('#canvasBtn').addEventListener('dragover', e => e.preventDefault());
-$('#canvasBtn').addEventListener('drop', e => { e.preventDefault(); const id = +e.dataTransfer.getData('wave/tab'); if (id) Wave.canvas?.saveTab(id); });
+$('#canvasBtn').addEventListener('drop', e => { e.preventDefault(); const id = +e.dataTransfer.getData('rainbow/tab'); if (id) Rainbow.canvas?.saveTab(id); });
 
 // Drag the gap between split panes to resize them.
 $('#splitDivider').addEventListener('pointerdown', e => {
   const div = e.currentTarget, sp = space(), r = $('#pageCard').getBoundingClientRect(), col = sp.splitDir === 'col';
-  div.setPointerCapture(e.pointerId);
+  try { div.setPointerCapture(e.pointerId); } catch { /* the window still reports the move */ }
   let last = -1;
   const move = ev => {
     // Resizing two live pages is the heaviest thing the shell does, so the ratio moves in 4 px steps.
@@ -3096,7 +3207,7 @@ function drawArchive() {
       onclick: () => {
         closeRecents();
         if (it.kind === 'card') setView('canvas');
-        else if (it.path) Wave.library?.open('downloads');
+        else if (it.path) Rainbow.library?.open('downloads');
         else if (it.url) openTab(it.url);
       },
     }, thumb, h('div', { class: 'arc-text' },
@@ -3142,18 +3253,18 @@ addEventListener('keydown', e => {
 
 /* ---------------- boot ---------------- */
 
-const Wave = window.Wave = {
+const Rainbow = window.Rainbow = {
   get state() { return state; }, NATIVE, h, $, uid, save, render, toast, menu, panel, closePanel, field, seg,
-  hostOf, toUrl, favicon, send, recv, snapshot, evalIn, veilOn, veilOff, closeAll,
+  hostOf, toUrl, favicon, send, recv, snapshot, ocr, putMedia, delMedia, evalIn, veilOn, veilOff, closeAll,
   space, tab, activeTab, live, openTab, activate, navigate, closeTab, pinTab, moveTabToSpace,
   addEssential, openEssential, removeEssential, clearToday, switchSpace, createSpace, deleteSpace,
   frameMenu, compactMenu, newTabMenu, linkMenu, setLayout, cbarAuto, placeChrome,
-  openSitePop, openShotTool,
+  openSitePop, openShotTool, spaceMenu,
   siteName, newFolder, newSpace, openNewSpace, closeNewSpace, folderToSpace, splitMenu, splitPicker, appMenu, openPeek, closePeek, applyTheme, setBoost, openBoost, openSettings, openSpaceSettings, openCmd, syncPage, splitWith, unsplit, setView, toggleSidebar, reopenClosed, PALETTES, THEMES, ICONS,
   media, openNowPlaying, closeNowPlaying, openRecents, closeRecents, sideButtons,
   get view() { return view; },
 };
-window.wave = { recv }; // what the native shell calls
+window.rainbow = { recv }; // what the native shell calls
 
 applyTheme();
 render();

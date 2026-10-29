@@ -1,15 +1,15 @@
-//! Wave's native shell. The chrome (sidebar, command bar, Ask Wave, Canvas) is the
+//! Rainbow's native shell. The chrome (sidebar, command bar, Ask Rainbow, Canvas) is the
 //! HTML app in `ui/`, loaded into one full-window webview. Each tab's page is its own
 //! child webview, placed in the rectangle the chrome reports. The two sides talk over
 //! a small JSON protocol: the chrome sends `{t: ...}` messages through `window.ipc`,
-//! and the shell answers by calling `wave.recv(...)` in the chrome.
+//! and the shell answers by calling `rainbow.recv(...)` in the chrome.
 //!
 //! Only the chrome webview may drive the shell. A page's IPC is limited to forwarding
 //! browser shortcuts (Ctrl+T, Ctrl+E, ...) that the page swallowed, Escape, saying it was
 //! clicked (for split view), and the http(s) address of a Shift+clicked link (for Peek),
 //! so a page can never reach app actions or the agent.
 
-// A shipped build is a GUI app: double-clicking Wave.exe must not leave a console window behind
+// A shipped build is a GUI app: double-clicking Rainbow.exe must not leave a console window behind
 // it. The `nightly` build keeps the console on purpose — the trace is the reason that build exists,
 // and on Windows a GUI subsystem binary has no stdout to print to at all. Debug builds keep it too.
 #![cfg_attr(all(windows, not(debug_assertions), not(feature = "nightly")), windows_subsystem = "windows")]
@@ -51,9 +51,9 @@ fn quiet(b: wry::WebViewBuilder<'_>) -> wry::WebViewBuilder<'_> {
 
 /// Where the surface page lives, next to the chrome's own.
 #[cfg(windows)]
-const SURFACE_URL: &str = "http://pond.localhost/surface.html";
+const SURFACE_URL: &str = "http://rainbow.localhost/surface.html";
 #[cfg(not(windows))]
-const SURFACE_URL: &str = "pond://localhost/surface.html";
+const SURFACE_URL: &str = "rainbow://localhost/surface.html";
 
 /// Lift a view above its siblings: a child window is drawn in creation order unless told otherwise.
 #[cfg(windows)]
@@ -68,7 +68,7 @@ fn raise(wv: &WebView) {
 fn raise(_: &WebView) {}
 
 /// A profile id as a folder name: letters and digits only, so an id from the chrome can never
-/// point outside Wave's own folders.
+/// point outside Rainbow's own folders.
 fn profile_key(p: &str) -> String {
     let k: String = p.chars().filter(|c| c.is_ascii_alphanumeric()).take(32).collect();
     if k.is_empty() { "default".to_string() } else { k }
@@ -120,16 +120,14 @@ fn ext_info(dir: &std::path::Path) -> Vec<Value> {
         .collect()
 }
 
-// ponytail: the chrome keeps its first origin and storage key ("pond") on purpose: renaming them
-// would start every install with empty settings, spaces and Canvas.
 #[cfg(windows)]
-const CHROME_URL: &str = "http://pond.localhost/index.html";
+const CHROME_URL: &str = "http://rainbow.localhost/index.html";
 #[cfg(not(windows))]
-const CHROME_URL: &str = "pond://localhost/index.html";
+const CHROME_URL: &str = "rainbow://localhost/index.html";
 
 /// The Chromium switches a browser needs to be a browser, borrowed from the idea that
 /// a privacy-focused fork builds around (`enable_reporting=false`, `safe_browsing_mode=0`,
-/// `enable_service_discovery=false`, `google_api_key=""` in its `flags.gn`). Wave cannot patch
+/// `enable_service_discovery=false`, `google_api_key=""` in its `flags.gn`). Rainbow cannot patch
 /// Chromium — it drives the WebView2 that ships with Windows — but it can refuse the background
 /// services that exist to report on the user rather than to render a page.
 ///
@@ -215,7 +213,7 @@ addEventListener('click', function (e) {
 /// expose the fixed control vocabulary the shell may call. The page never sends commands.
 const PAGE_MEDIA: &str = r#"
 (function () {
-  if (window.__waveMedia) return;
+  if (window.__rainbowMedia) return;
   var last = '', pending = 0;
   function pick() {
     var list = document.querySelectorAll('video,audio'), best = null, bs = -1;
@@ -263,7 +261,7 @@ const PAGE_MEDIA: &str = r#"
     window.ipc.postMessage(JSON.stringify({ media: s }));
   }
   function soon(ms) { if (pending) return; pending = setTimeout(function () { pending = 0; report(); }, ms || 200); }
-  window.__waveMedia = function (op, v) {
+  window.__rainbowMedia = function (op, v) {
     var el = pick();
     try {
       if (op === 'report') { report(); return true; }
@@ -447,21 +445,16 @@ fn animate_pip(hwnd: isize, from: (f64, f64, f64, f64), to: (f64, f64, f64, f64)
     }
 }
 
-/// Wave's per-user data: one folder per profile (logins, cookies) and the extensions folder.
+/// Rainbow's per-user data: one folder per profile (logins, cookies) and the extensions folder.
 fn data_root() -> PathBuf {
-    if let Some(p) = std::env::var_os("WAVE_DATA_ROOT") {
+    if let Some(p) = std::env::var_os("RAINBOW_DATA_ROOT") {
         return PathBuf::from(p);
     }
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_else(std::env::temp_dir);
-    // The app used to be called Pond: move its profiles, extensions and downloads index across.
-    let (old, new) = (base.join("Pond"), base.join("Wave"));
-    if old.exists() && !new.exists() {
-        let _ = std::fs::rename(&old, &new);
-    }
-    new
+    base.join("Rainbow")
 }
 
 enum UserEvent {
@@ -477,7 +470,7 @@ enum UserEvent {
     Foreground(isize),
     /// Run a fixed script in a tab once a native animation has finished.
     Run(u64, &'static str),
-    /// Write one PNG of the chrome and quit (WAVE_SHOT). A diagnostic, not a feature.
+    /// Write one PNG of the chrome and quit (RAINBOW_SHOT). A diagnostic, not a feature.
     Shot(PathBuf),
     /// The chrome capture finished (or timed out): now the loop may stop.
     ShotDone,
@@ -512,7 +505,7 @@ impl Agg {
     }
 }
 
-/// WAVE_PERF=1 writes a line per second with how long the native resize path took.
+/// RAINBOW_PERF=1 writes a line per second with how long the native resize path took.
 struct Perf {
     window: std::fs::File,
     next: Instant,
@@ -525,10 +518,10 @@ struct Perf {
 
 impl Perf {
     fn open() -> Option<Self> {
-        if std::env::var_os("WAVE_PERF").is_none() {
+        if std::env::var_os("RAINBOW_PERF").is_none() {
             return None;
         }
-        let path = std::env::temp_dir().join(format!("wave-perf-{}.log", std::process::id()));
+        let path = std::env::temp_dir().join(format!("rainbow-perf-{}.log", std::process::id()));
         let file = std::fs::OpenOptions::new().create(true).append(true).open(path).ok()?;
         Some(Self { window: file, next: Instant::now() + Duration::from_secs(1), resized: 0, layouts: 0, chrome: Agg::default(), pane: Agg::default(), region: Agg::default() })
     }
@@ -555,8 +548,8 @@ impl Perf {
     }
 }
 
-/// WAVE_BENCH=1 drives its own resize loop on a throwaway profile and writes
-/// `%TEMP%/wave-bench.json`, so the resize cost can be compared without a mouse or eyes.
+/// RAINBOW_BENCH=1 drives its own resize loop on a throwaway profile and writes
+/// `%TEMP%/rainbow-bench.json`, so the resize cost can be compared without a mouse or eyes.
 struct Bench {
     step: u32,
     next: Instant,
@@ -587,10 +580,10 @@ struct App {
     active: Option<u64>,
     /// Page corner radius in logical px.
     radius: f64,
-    /// While an overlay (Ask Wave, command bar) is up, the page is hidden and the chrome
+    /// While an overlay (Ask Rainbow, command bar) is up, the page is hidden and the chrome
     /// shows a blurred snapshot of it instead: a native child can't be blurred by CSS.
     overlay: bool,
-    /// Ask Wave's bottom band is up: pages stay visible, but the chrome keeps keyboard focus.
+    /// Ask Rainbow's bottom band is up: pages stay visible, but the chrome keeps keyboard focus.
     asking: bool,
     /// The chrome is drawn over the page, clipped to the sidebar column: the width of that
     /// column in logical px while the collapsed sidebar or the grown rail is showing.
@@ -602,8 +595,8 @@ struct App {
     /// The bar's width in logical px, or 0 for the whole window. The strip is only as wide as
     /// the bar: while the bar rides the peeked sidebar it must not cover the page beside it.
     chrome_bar_w: f64,
-    /// A strip of chrome drawn over the live page (Ask Wave's wash): (top, height) in logical px.
-    chrome_band: Option<(f64, f64)>,
+    /// A strip of chrome drawn over the live page (Ask Rainbow's wash): (top, height) in logical px.
+    chrome_band: Vec<(f64, f64, f64, f64)>,
     /// The peeked sidebar is on the right of the window (tabs on the right).
     chrome_right: bool,
     /// Whether the chrome is currently clipped and raised (kept so the normal path does no work).
@@ -637,14 +630,14 @@ struct App {
     pip_since: HashMap<u64, Instant>,
 }
 
-/// WAVE_LEGACY_RESIZE=1 restores the old behaviour of applying every resize immediately.
+/// RAINBOW_LEGACY_RESIZE=1 restores the old behaviour of applying every resize immediately.
 fn legacy_resize() -> bool {
-    std::env::var_os("WAVE_LEGACY_RESIZE").is_some()
+    std::env::var_os("RAINBOW_LEGACY_RESIZE").is_some()
 }
 
-/// WAVE_KEEP_REGION=1 restores rebuilding the GDI region on every pane resize.
+/// RAINBOW_KEEP_REGION=1 restores rebuilding the GDI region on every pane resize.
 fn keep_region() -> bool {
-    std::env::var_os("WAVE_KEEP_REGION").is_some()
+    std::env::var_os("RAINBOW_KEEP_REGION").is_some()
 }
 
 fn rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
@@ -654,8 +647,58 @@ fn rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
     }
 }
 
+/// Where captured Canvas images live once they are too big for the chrome's store: one file per
+/// capture, readable by other apps and outside the localStorage quota.
+fn media_dir() -> PathBuf {
+    data_root().join("media")
+}
+
+/// A media name is a flat filename (`c<id>-<stamp>.jpg`) and nothing else: no folders, no `..`.
+fn safe_media_name(name: &str) -> Option<&str> {
+    if name.is_empty() || name.len() > 96 {
+        return None;
+    }
+    let ok = name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+    if ok && !name.contains("..") { Some(name) } else { None }
+}
+
+fn image_mime(name: &str) -> &'static str {
+    match name.rsplit('.').next() {
+        Some("png") => "image/png",
+        Some("webp") => "image/webp",
+        Some("gif") => "image/gif",
+        Some("svg") => "image/svg+xml",
+        _ => "image/jpeg",
+    }
+}
+
+/// Write one data URL to the media folder and return the URL the chrome can load it from.
+fn save_media(name: &str, data_url: &str) -> Option<String> {
+    let name = safe_media_name(name)?;
+    let (meta, body) = data_url.split_once(',')?;
+    if !meta.starts_with("data:image/") {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::STANDARD.decode(body).ok()?;
+    std::fs::create_dir_all(media_dir()).ok()?;
+    std::fs::write(media_dir().join(name), &bytes).ok()?;
+    Some(format!("http://rainbow.localhost/media/{name}"))
+}
+
+fn remove_media(name: &str) {
+    if let Some(name) = safe_media_name(name) {
+        let _ = std::fs::remove_file(media_dir().join(name));
+    }
+}
+
 fn ui_file(path: &str) -> Option<(Cow<'static, [u8]>, &'static str)> {
     let path = path.trim_start_matches('/');
+    // Captured images are served from the media folder, not the embedded chrome.
+    if let Some(name) = path.strip_prefix("media/") {
+        let name = safe_media_name(name)?;
+        let body = std::fs::read(media_dir().join(name)).ok()?;
+        return Some((Cow::Owned(body), image_mime(name)));
+    }
     let path = if path.is_empty() { "index.html" } else { path };
     if path.contains("..") {
         return None;
@@ -670,12 +713,12 @@ fn ui_file(path: &str) -> Option<(Cow<'static, [u8]>, &'static str)> {
         _ => "application/octet-stream",
     };
     // A shipped exe carries its chrome; a source checkout can still serve ui/ from disk
-    // (WAVE_UI_DIR, or any debug build) so the chrome is editable without a rebuild.
-    if let Some(dir) = std::env::var_os("WAVE_UI_DIR") {
+    // (RAINBOW_UI_DIR, or any debug build) so the chrome is editable without a rebuild.
+    if let Some(dir) = std::env::var_os("RAINBOW_UI_DIR") {
         let dir = dir.to_string_lossy();
         return std::fs::read(format!("{dir}/{path}")).ok().map(|b| (Cow::Owned(b), mime));
     }
-    if cfg!(debug_assertions) && std::env::var_os("WAVE_UI_EMBEDDED").is_none() {
+    if cfg!(debug_assertions) && std::env::var_os("RAINBOW_UI_EMBEDDED").is_none() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/ui");
         if let Ok(b) = std::fs::read(format!("{dir}/{path}")) {
             return Some((Cow::Owned(b), mime));
@@ -694,7 +737,7 @@ mod assets {
 impl App {
     fn to_chrome(&self, v: &Value) {
         if let Some(c) = &self.chrome {
-            let _ = c.evaluate_script(&format!("window.wave && wave.recv({v})"));
+            let _ = c.evaluate_script(&format!("window.rainbow && rainbow.recv({v})"));
         }
     }
 
@@ -724,7 +767,7 @@ impl App {
             if op == "pip" {
                 let baseline = pip_windows();
                 if let Some(wv) = self.tabs.get(&id) {
-                    let _ = wv.evaluate_script("window.__waveMedia&&window.__waveMedia(\"pip\",0)");
+                    let _ = wv.evaluate_script("window.__rainbowMedia&&window.__rainbowMedia(\"pip\",0)");
                 }
                 let from = to_screen(rect_of(rect));
                 let area = to_screen(rect_of(pane));
@@ -763,7 +806,7 @@ impl App {
                         }
                         let _ = proxy.send_event(UserEvent::Run(
                             id,
-                            "window.__waveMedia&&window.__waveMedia(\"exitpip\",0)",
+                            "window.__rainbowMedia&&window.__rainbowMedia(\"exitpip\",0)",
                         ));
                     });
                     return;
@@ -771,14 +814,14 @@ impl App {
             }
             if op == "pip" || op == "exitpip" {
                 if let Some(wv) = self.tabs.get(&id) {
-                    let _ = wv.evaluate_script(&format!("window.__waveMedia&&window.__waveMedia({},0)", json!(op)));
+                    let _ = wv.evaluate_script(&format!("window.__rainbowMedia&&window.__rainbowMedia({},0)", json!(op)));
                 }
                 return;
             }
         }
         if let Some(wv) = self.tabs.get(&id) {
             let _ = wv.evaluate_script(&format!(
-                "window.__waveMedia&&window.__waveMedia({},{})",
+                "window.__rainbowMedia&&window.__rainbowMedia({},{})",
                 json!(op),
                 json!(v.clamp(-604800.0, 604800.0))
             ));
@@ -876,7 +919,7 @@ impl App {
                     json!({"t": "download", "url": url, "path": path, "size": size, "state": if ok { "done" } else { "failed" }}),
                 ));
             });
-        // Chromium extensions: every unpacked folder inside Wave's extensions folder loads.
+        // Chromium extensions: every unpacked folder inside Rainbow's extensions folder loads.
         #[cfg(windows)]
         let builder = {
             builder.with_browser_extensions_enabled(true).with_extensions_path(ext_dir(&key))
@@ -890,7 +933,7 @@ impl App {
                     raise(sf);   // a view made later sits above it unless it is lifted again
                 }
             }
-            Err(e) => eprintln!("wave: tab {id} failed: {e}"),
+            Err(e) => eprintln!("rainbow: tab {id} failed: {e}"),
         }
     }
 
@@ -909,7 +952,7 @@ impl App {
                 .with_transparent(true)
                 .with_visible(false)
                 .with_bounds(r)
-                .with_custom_protocol("pond".into(), |_, req| match ui_file(req.uri().path()) {
+                .with_custom_protocol("rainbow".into(), |_, req| match ui_file(req.uri().path()) {
                     Some((body, mime)) => Response::builder().header("Content-Type", mime).body(body).unwrap(),
                     None => Response::builder().status(404).body(Cow::Borrowed(&b""[..])).unwrap(),
                 })
@@ -930,7 +973,7 @@ impl App {
             .build_as_child(window);
             match built {
                 Ok(wv) => self.surface = Some(wv),
-                Err(e) => eprintln!("wave: surface failed: {e}"),
+                Err(e) => eprintln!("rainbow: surface failed: {e}"),
             }
         }
         if let Some(wv) = &self.surface {
@@ -1034,15 +1077,15 @@ impl App {
     /// Cut the chrome around the page and raise it over the page, or put it back behind. The
     /// sidebar floats over the page by drawing the chrome everywhere the page is not.
     fn reclip(&mut self) {
-        // A full overlay (command bar, settings) and Ask Wave's band both draw across the
+        // A full overlay (command bar, settings) and Ask Rainbow's band both draw across the
         // window, so neither can live inside the sidebar column's clip.
         let mut want = self.chrome_over.filter(|_| !self.overlay && !self.asking);
         // The compact bar is its own strip across the top: it clips even when the sidebar
         // column is not out, because the page would otherwise cover it.
         self.chrome_bar_h = self.chrome_bar.filter(|_| !self.overlay && !self.asking).unwrap_or(0.0);
-        // Ask Wave's wash is a band of chrome over the live page; it is on while the question is asked.
-        let band = self.chrome_band.filter(|_| !self.overlay);
-        if (self.chrome_bar_h > 0.0 || band.is_some()) && want.is_none() {
+        // Ask Rainbow's wash is a band of chrome over the live page; it is on while the question is asked.
+        let band: Vec<(f64, f64, f64, f64)> = if self.overlay { Vec::new() } else { self.chrome_band.clone() };
+        if (self.chrome_bar_h > 0.0 || !band.is_empty()) && want.is_none() {
             want = Some(0.0);
         }
         // A minimized or not-yet-shown window has no area to clip to, and clipping there
@@ -1062,7 +1105,7 @@ impl App {
         self.clipped = want.is_some();
         let Some(c) = &self.chrome else { return };
         let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor());
-        chrome_over(c, want, scale, win, &self.panes, self.chrome_bar_h, self.chrome_bar_w, band, self.chrome_right);
+        chrome_over(c, want, scale, win, &self.panes, self.chrome_bar_h, self.chrome_bar_w, &band, self.chrome_right);
     }
 
     /// Rebuild the exact corner regions once the window has stopped moving.
@@ -1102,10 +1145,10 @@ impl App {
         }
     }
 
-    /// WAVE_BENCH=1: open two heavy local pages and resize them in a loop, so the
-    /// resize path can be measured without a mouse. Writes %TEMP%/wave-bench.json.
+    /// RAINBOW_BENCH=1: open two heavy local pages and resize them in a loop, so the
+    /// resize path can be measured without a mouse. Writes %TEMP%/rainbow-bench.json.
     fn start_bench(&mut self) {
-        if std::env::var_os("WAVE_BENCH").is_none() {
+        if std::env::var_os("RAINBOW_BENCH").is_none() {
             return;
         }
         let ids = [900_001u64, 900_002];
@@ -1148,9 +1191,9 @@ impl App {
                 "legacy_resize": legacy_resize(),
                 "keep_region": keep_region(),
             });
-            let path = std::env::temp_dir().join("wave-bench.json");
+            let path = std::env::temp_dir().join("rainbow-bench.json");
             let _ = std::fs::write(&path, serde_json::to_vec_pretty(&out).unwrap_or_default());
-            eprintln!("wave: bench written to {}", path.display());
+            eprintln!("rainbow: bench written to {}", path.display());
             el.exit();
             return;
         }
@@ -1255,6 +1298,38 @@ impl App {
         }
     }
 
+    /// OCR a captured data URL (`data:image/jpeg;base64,…`). The work runs on its own thread and
+    /// the reply comes back as `{t:"ocrResult", req, data}`, where `data` is `null` when no
+    /// recognizer is available or the image could not be read. The capture is never blocked on it.
+    fn ocr(&self, m: &Value) {
+        let req = m["req"].as_u64().unwrap_or(0);
+        let image = m["data"].as_str().unwrap_or_default().to_string();
+        let proxy = self.proxy.clone();
+        std::thread::spawn(move || {
+            let result = recognize(&image);
+            let _ = proxy.send_event(UserEvent::ToChrome(json!({"t": "ocrResult", "req": req, "data": result})));
+        });
+    }
+
+    /// Put a capture's image on disk (`op:"put"`, name + data URL), or remove it (`op:"del"`).
+    /// Either way the chrome hears back, and a failed write leaves the card's data URL intact.
+    fn media(&self, m: &Value) {
+        let req = m["req"].as_u64().unwrap_or(0);
+        let name = m["name"].as_str().unwrap_or_default();
+        let reply = match m["op"].as_str().unwrap_or("put") {
+            "put" => match save_media(name, m["data"].as_str().unwrap_or_default()) {
+                Some(url) => json!({"t": "mediaSaved", "req": req, "url": url}),
+                None => json!({"t": "mediaSaved", "req": req, "url": null}),
+            },
+            "del" => {
+                remove_media(name);
+                json!({"t": "mediaSaved", "req": req, "ok": true})
+            }
+            _ => json!({"t": "mediaSaved", "req": req, "url": null}),
+        };
+        self.to_chrome(&reply);
+    }
+
     /// The site-options "…": clear this origin's cookies, or the HTTP cache. Cookies are exact
     /// (`Storage.clearDataForOrigin`); the cache has no per-origin lever in the protocol, so it
     /// is the whole cache, and the toast says so.
@@ -1320,7 +1395,7 @@ impl App {
                 }
             }
             "eval" => {
-                // Read something out of a page (Ask Wave's read_page). The result is page
+                // Read something out of a page (Ask Rainbow's read_page). The result is page
                 // data: the chrome treats it as untrusted text, never as instructions.
                 let req = m["req"].clone();
                 let proxy = self.proxy.clone();
@@ -1364,6 +1439,12 @@ impl App {
                     self.shot_tab(id, m["full"].as_bool().unwrap_or(false));
                 }
             }
+            // Read the text out of a captured image, off the event loop. The capture itself is
+            // already saved; OCR is a reply the chrome attaches when it arrives.
+            "ocr" => self.ocr(&m),
+            // Move a capture's image out of the chrome's store and onto disk. The reply carries
+            // the URL the card should use from then on.
+            "media" => self.media(&m),
             "sitedata" => {
                 if let Some(id) = id {
                     self.site_data(id, m["op"].as_str().unwrap_or("cache"), m["origin"].as_str().unwrap_or(""));
@@ -1392,9 +1473,14 @@ impl App {
             "chrome" => {
                 // A message about the band alone leaves the sidebar and bar settings as they are.
                 if let Some(b) = m.get("band") {
-                    self.chrome_band = match (b["y"].as_f64(), b["h"].as_f64()) {
-                        (Some(y), Some(h)) if h > 0.0 => Some((y.max(0.0), h)),
+                    // One strip (x and w optional: the whole width), a list of strips, or null for none.
+                    let one = |r: &Value| match (r["y"].as_f64(), r["h"].as_f64()) {
+                        (Some(y), Some(h)) if h > 0.0 => Some((r["x"].as_f64().unwrap_or(0.0).max(0.0), y.max(0.0), r["w"].as_f64().unwrap_or(0.0).max(0.0), h)),
                         _ => None,
+                    };
+                    self.chrome_band = match b.as_array() {
+                        Some(list) => list.iter().filter_map(one).collect(),
+                        None => one(b).into_iter().collect(),
                     };
                     if m.get("over").is_none() && m.get("bar").is_none() {
                         self.reclip();
@@ -1473,7 +1559,7 @@ impl ApplicationHandler<UserEvent> for App {
             return;
         }
         let attrs = Window::default_attributes()
-            .with_title("Wave")
+            .with_title("Rainbow")
             .with_inner_size(LogicalSize::new(1400.0, 900.0));
         #[cfg(windows)]
         let attrs = {
@@ -1493,8 +1579,8 @@ impl ApplicationHandler<UserEvent> for App {
             .with_url(CHROME_URL)
             .with_bounds(rect(0.0, 0.0, size.width, size.height))
             .with_devtools(true)
-            .with_initialization_script(format!("window.WAVE_NATIVE = true; window.WAVE_OS = '{os}';")))
-            .with_custom_protocol("pond".into(), |_, req| match ui_file(req.uri().path()) {
+            .with_initialization_script(format!("window.RAINBOW_NATIVE = true; window.RAINBOW_OS = '{os}';")))
+            .with_custom_protocol("rainbow".into(), |_, req| match ui_file(req.uri().path()) {
                 Some((body, mime)) => Response::builder().header("Content-Type", mime).body(body).unwrap(),
                 None => Response::builder().status(404).body(Cow::Borrowed(&b""[..])).unwrap(),
             })
@@ -1503,14 +1589,14 @@ impl ApplicationHandler<UserEvent> for App {
             })
             .build_as_child(&window);
         // A locked user data folder is the one failure a user can cause by double-clicking the
-        // icon twice: WebView2 refuses to share a profile between processes and the second Wave
+        // icon twice: WebView2 refuses to share a profile between processes and the second Rainbow
         // would otherwise die on a Rust panic with a backtrace nobody can act on.
         let chrome = match chrome {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("Wave could not start: {e}");
-                eprintln!("Another Wave is probably already running — close it and try again.");
-                eprintln!("If not, delete the \"Wave.exe.WebView2\" folder next to this program.");
+                eprintln!("Rainbow could not start: {e}");
+                eprintln!("Another Rainbow is probably already running — close it and try again.");
+                eprintln!("If not, delete the \"Rainbow.exe.WebView2\" folder next to this program.");
                 std::process::exit(1);
             }
         };
@@ -1525,10 +1611,10 @@ impl ApplicationHandler<UserEvent> for App {
             });
         }
         self.start_bench();
-        // WAVE_SHOT=<png>: render the chrome once and exit. The window is a WebView2 surface, so
+        // RAINBOW_SHOT=<png>: render the chrome once and exit. The window is a WebView2 surface, so
         // a screen or PrintWindow capture of it comes back black; this asks WebView2 itself, which
         // is the only way to see whether the chrome paints on a machine with no visible desktop.
-        if let Ok(path) = std::env::var("WAVE_SHOT") {
+        if let Ok(path) = std::env::var("RAINBOW_SHOT") {
             let proxy = self.proxy.clone();
             std::thread::spawn(move || {
                 // One shot, twice the patience: a cold WebView2 can still be finding its feet
@@ -1603,7 +1689,7 @@ impl ApplicationHandler<UserEvent> for App {
                     let _ = c.evaluate_script(
                         "window.ipc.postMessage(JSON.stringify({t:'probe',title:document.title,\
                          len:document.documentElement.innerHTML.length,\
-                         url:location.href,js:typeof wave}))",
+                         url:location.href,js:typeof rainbow}))",
                     );
                     chrome_shot(c, &path, self.proxy.clone());
                 }
@@ -1759,14 +1845,69 @@ fn capture(_: &WebView, id: u64, tag: &str, proxy: EventLoopProxy<UserEvent>) {
     let _ = proxy.send_event(UserEvent::ToChrome(json!({"t": tag, "id": id, "data": null})));
 }
 
-/// `WAVE_TRACE=1`: print what the shell and the chrome say to each other. Startup and capture
+/// Read the text out of a captured image with Windows' own recognizer (`Windows.Media.Ocr`):
+/// offline, no model to download, and it uses the language packs the machine already has.
+/// Returns `{text, lines:[{text,x,y,w,h}]}`, or `None` when no recognizer or image is available.
+/// It runs on a worker thread, so the async WinRT calls block only that thread.
+#[cfg(windows)]
+fn recognize(data_url: &str) -> Option<Value> {
+    use windows::Graphics::Imaging::{BitmapAlphaMode, BitmapDecoder, BitmapPixelFormat, SoftwareBitmap};
+    use windows::Media::Ocr::OcrEngine;
+    use windows::Storage::Streams::{DataWriter, InMemoryRandomAccessStream};
+    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data_url.split(',').nth(1)?).ok()?;
+    if bytes.is_empty() {
+        return None;
+    }
+    // A pooled thread, so failing here (the apartment is already set) is harmless.
+    let _ = unsafe { RoInitialize(RO_INIT_MULTITHREADED) };
+    let engine = OcrEngine::TryCreateFromUserProfileLanguages().ok()?;
+    let stream = InMemoryRandomAccessStream::new().ok()?;
+    let writer = DataWriter::CreateDataWriter(&stream).ok()?;
+    writer.WriteBytes(&bytes).ok()?;
+    writer.StoreAsync().ok()?.join().ok()?;
+    stream.Seek(0).ok()?;
+    let decoder = BitmapDecoder::CreateAsync(&stream).ok()?.join().ok()?;
+    let bitmap = decoder.GetSoftwareBitmapAsync().ok()?.join().ok()?;
+    // The recognizer wants Bgra8; a JPEG usually decodes to another format, so convert when needed.
+    let bitmap = if bitmap.BitmapPixelFormat().ok()? == BitmapPixelFormat::Bgra8 {
+        bitmap
+    } else {
+        SoftwareBitmap::ConvertWithAlpha(&bitmap, BitmapPixelFormat::Bgra8, BitmapAlphaMode::Premultiplied).ok()?
+    };
+    let result = engine.RecognizeAsync(&bitmap).ok()?.join().ok()?;
+    let text = result.Text().ok()?.to_string();
+    let mut lines = Vec::new();
+    if let Ok(ls) = result.Lines() {
+        for i in 0..ls.Size().unwrap_or(0) {
+            let Ok(line) = ls.GetAt(i) else { continue };
+            let Ok(line_text) = line.Text() else { continue };
+            // The first word's box stands in for the line's, which is all the chrome needs to
+            // point at where the words came from.
+            let rect = line.Words().ok().and_then(|ws| {
+                (0..ws.Size().ok()?).find_map(|j| ws.GetAt(j).ok().and_then(|w| w.BoundingRect().ok()))
+            });
+            let (x, y, w, h) = rect.map(|r| (r.X, r.Y, r.Width, r.Height)).unwrap_or((0.0, 0.0, 0.0, 0.0));
+            lines.push(json!({"text": line_text.to_string(), "x": x, "y": y, "w": w, "h": h}));
+        }
+    }
+    Some(json!({"text": text, "lines": lines}))
+}
+
+#[cfg(not(windows))]
+fn recognize(_: &str) -> Option<Value> {
+    None
+}
+
+/// `RAINBOW_TRACE=1`: print what the shell and the chrome say to each other. Startup and capture
 /// problems are invisible otherwise, and a black window has no other tell. A `nightly` build
 /// always traces — it is built to be watched, so nobody should have to set a variable first.
 fn trace(msg: &str) {
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
-    if *ON.get_or_init(|| cfg!(feature = "nightly") || std::env::var_os("WAVE_TRACE").is_some()) {
-        eprintln!("wave: {msg}");
+    if *ON.get_or_init(|| cfg!(feature = "nightly") || std::env::var_os("RAINBOW_TRACE").is_some()) {
+        eprintln!("rainbow: {msg}");
     }
 }
 
@@ -1776,11 +1917,11 @@ fn banner() {
         return;
     }
     let version = env!("CARGO_PKG_VERSION");
-    eprintln!("wave {version} nightly — trace on. Ctrl+C or close the window to stop.");
+    eprintln!("rainbow {version} nightly — trace on. Ctrl+C or close the window to stop.");
     trace("build: nightly (console subsystem, every message logged)");
 }
 
-/// Ask WebView2 for one PNG of the chrome and write it to `path` (WAVE_SHOT). A window capture
+/// Ask WebView2 for one PNG of the chrome and write it to `path` (RAINBOW_SHOT). A window capture
 /// of a WebView2 surface comes back black, so this asks WebView2 itself — the only way to see
 /// whether the chrome paints on a machine with no visible desktop. `CapturePreview` is the
 /// native path and works whether or not the controller reports itself visible; a DevTools
@@ -1814,9 +1955,9 @@ fn chrome_shot(wv: &WebView, path: &std::path::Path, proxy: EventLoopProxy<UserE
             buf
         };
         if data.is_empty() {
-            eprintln!("wave: shot: empty image");
+            eprintln!("rainbow: shot: empty image");
         } else {
-            eprintln!("wave: shot bytes={} -> {}", data.len(), file.display());
+            eprintln!("rainbow: shot bytes={} -> {}", data.len(), file.display());
             let _ = std::fs::write(&file, &data);
             let _ = done.send_event(UserEvent::ShotDone);
         }
@@ -1826,7 +1967,7 @@ fn chrome_shot(wv: &WebView, path: &std::path::Path, proxy: EventLoopProxy<UserE
         wv.webview().CapturePreview(COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, &stream, &handler)
     };
     if let Err(e) = r {
-        eprintln!("wave: shot: CapturePreview failed: {e:?}");
+        eprintln!("rainbow: shot: CapturePreview failed: {e:?}");
         let _ = proxy.send_event(UserEvent::ShotDone);
     }
 }
@@ -1873,7 +2014,7 @@ fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale
 /// not painted and does not take clicks, so the page stays live underneath and the page never
 /// has to be resized. `width: None` puts the chrome back behind the pages.
 #[cfg(windows)]
-fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64, band: Option<(f64, f64)>, right: bool) {
+fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64, band: &[(f64, f64, f64, f64)], right: bool) {
     use windows::Win32::Graphics::Gdi::{
         CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_DIFF, RGN_OR,
     };
@@ -1889,7 +2030,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
     unsafe {
         let Some(px) = width else {
             // No sidebar column, but the compact bar may still need its strip.
-            if bar_h > 0.0 || band.is_some() {
+            if bar_h > 0.0 || !band.is_empty() {
                 // Everything the pages do not cover (the sidebar when it is always on, the frame around
                 // the page) plus the bar's strip over the page. Clipping to the strip alone made
                 // the always-on sidebar vanish whenever the bar came out.
@@ -1905,8 +2046,9 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
                     CombineRgn(Some(rgn), Some(rgn), Some(bar), RGN_OR);
                     let _ = DeleteObject(bar.into());
                 }
-                if let Some((y, bh)) = band {
-                    let b = CreateRectRgn(0, (y * scale).round() as i32, w, ((y + bh) * scale).round() as i32);
+                for &(bx, y, bwd, bh) in band {
+                    let (x0, x1) = ((bx * scale).round() as i32, if bwd > 0.0 { ((bx + bwd) * scale).round() as i32 } else { w });
+                    let b = CreateRectRgn(x0, (y * scale).round() as i32, x1, ((y + bh) * scale).round() as i32);
                     CombineRgn(Some(rgn), Some(rgn), Some(b), RGN_OR);
                     let _ = DeleteObject(b.into());
                 }
@@ -1931,9 +2073,10 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
         let column = CreateRectRgn(col.0, col.1, col.2, col.3);
         CombineRgn(Some(rgn), Some(rgn), Some(column), RGN_OR);
         let _ = DeleteObject(column.into());
-        // ...plus Ask Wave's band, which is drawn over the live page.
-        if let Some((y, bh)) = band {
-            let b = CreateRectRgn(0, (y * scale).round() as i32, w, ((y + bh) * scale).round() as i32);
+        // ...plus Ask Rainbow's band, which is drawn over the live page.
+        for &(bx, y, bwd, bh) in band {
+            let (x0, x1) = ((bx * scale).round() as i32, if bwd > 0.0 { ((bx + bwd) * scale).round() as i32 } else { w });
+            let b = CreateRectRgn(x0, (y * scale).round() as i32, x1, ((y + bh) * scale).round() as i32);
             CombineRgn(Some(rgn), Some(rgn), Some(b), RGN_OR);
             let _ = DeleteObject(b.into());
         }
@@ -1951,9 +2094,9 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
 // ponytail: on macOS the page webview is an NSView above the chrome's, so the same clip needs
 // `addSubview:positioned:`. The CSS overlay still works there, the page just covers it.
 #[cfg(not(windows))]
-fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: Option<(f64, f64)>, _: bool) {}
+fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: &[(f64, f64, f64, f64)], _: bool) {}
 
-/// Start Windows voice typing (Win+H) into whatever has focus: Ask Wave's input.
+/// Start Windows voice typing (Win+H) into whatever has focus: Ask Rainbow's input.
 #[cfg(windows)]
 fn dictate() {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -2016,7 +2159,7 @@ fn main() {
         chrome_bar: None,
         chrome_bar_h: 0.0,
         chrome_bar_w: 0.0,
-        chrome_band: None,
+        chrome_band: Vec::new(),
         chrome_right: false,
         clipped: false,
         chrome_size: None,

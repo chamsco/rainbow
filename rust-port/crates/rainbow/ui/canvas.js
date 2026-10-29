@@ -1,10 +1,10 @@
 'use strict';
-/* Canvas: Wave's global bookmarks, laid out as an infinite board of cards (links with
+/* Canvas: Rainbow's global bookmarks, laid out as an infinite board of cards (links with
    screenshots, images, notes) grouped by topic and joined by lines. It is the same data
    the command bar searches, so "bookmarks" and "the canvas" are one store. */
 (() => {
-  const { h, $, uid, save, toast, hostOf, favicon } = Wave;
-  const S = () => Wave.state;
+  const { h, $, uid, save, toast, hostOf, favicon } = Rainbow;
+  const S = () => Rainbow.state;
   const el = $('#canvasView');
   const DAY = 864e5, STALE = 14 * DAY;
   const CELL_W = 1000, CELL_H = 820;
@@ -67,13 +67,29 @@
     return { x: cx, y: cy };
   }
 
+  const mediaExt = d => (String(d).match(/^data:image\/(\w+)/) || [])[1]?.replace('jpeg', 'jpg') || 'jpg';
+  /* A screenshot is megabytes; the chrome's store is small. Move the image to a file and keep a
+     short URL on the card. If the write fails (or this is the browser stand-in) the data URL stays,
+     so a capture is never lost. */
+  function offload(b) {
+    if (!b || b.kind !== 'image' || !String(b.image || '').startsWith('data:image/') || !Rainbow.putMedia) return;
+    const name = `c${b.id}-${Date.now().toString(36)}.${mediaExt(b.image)}`;
+    b.media = name;
+    Rainbow.putMedia(name, b.image).then(url => {
+      if (!url) return;
+      b.image = url;
+      save(); draw(); Rainbow.render?.();
+    });
+  }
+
   function add(card) {
-    const topic = card.topic || Wave.space().name;
+    const topic = card.topic || Rainbow.space().name;
     const w = card.kind === 'note' ? 230 : card.kind === 'image' ? 210 : 250;
     const b = { id: uid(), kind: 'link', title: '', note: '', image: null, created: Date.now(), visits: 0, lastVisit: null, tilt: +(Math.random() * 3 - 1.5).toFixed(2), ...card, topic, w };
     if (b.x == null) Object.assign(b, place(topic, w));
     S().bookmarks.push(b);
-    save(); draw(); Wave.render();
+    offload(b);
+    save(); draw(); Rainbow.render();
     return b;
   }
 
@@ -92,14 +108,14 @@
   }
 
   async function saveTab(id, extra = {}) {
-    const t = Wave.tab(id);
+    const t = Rainbow.tab(id);
     if (!t) return null;
     const dup = S().bookmarks.find(b => b.url === t.url);
     if (dup) { toast('Already on your Canvas'); return dup; }
     // What the page says about itself (works in the native shell; same-origin only in a browser).
-    const meta = await Wave.evalIn(id, `(() => { const m = s => document.querySelector(s)?.content || null;
+    const meta = await Rainbow.evalIn(id, `(() => { const m = s => document.querySelector(s)?.content || null;
       return { d: m('meta[property="og:description"]') || m('meta[name="description"]'), i: m('meta[property="og:image"]') || m('meta[name="twitter:image"]') }; })()`);
-    const shot = await Wave.snapshot(id);
+    const shot = await Rainbow.snapshot(id);
     const b = add({
       kind: 'link', url: t.url, title: t.custom || t.title || hostOf(t.url),
       note: (meta?.d || '').slice(0, 280), image: meta?.i || (shot ? await shrink(shot) : null),
@@ -118,12 +134,45 @@
   function revisit(b) {
     touch(b.url);
     save();
-    Wave.openTab(b.url, { title: b.title });
+    Rainbow.openTab(b.url, { title: b.title });
+  }
+  /* Removing a card is reversible. Keep the card and its edges, and hold the image file for a
+     minute: a restore gets its picture back, while genuinely discarded captures still leave disk. */
+  const undoStack = [], redoStack = [], trash = new Map();
+  const clone = v => JSON.parse(JSON.stringify(v));
+  const snapshot = b => ({ card: clone(b), edges: S().edges.filter(e => e.a === b.id || e.b === b.id).map(e => ({ ...e })) });
+  function pushUndo(entry) { undoStack.push(entry); if (undoStack.length > 30) undoStack.shift(); redoStack.length = 0; }
+  function restore(entry) {
+    if (!S().bookmarks.some(x => x.id === entry.card.id)) S().bookmarks.push(clone(entry.card));
+    for (const e of entry.edges) if (!S().edges.some(x => x.a === e.a && x.b === e.b)) S().edges.push({ ...e });
+    const t = trash.get(entry.card.id);
+    if (t) { clearTimeout(t); trash.delete(entry.card.id); }
+    save(); draw(); Rainbow.render?.();
+  }
+  function removeCard(entry) {
+    S().bookmarks = S().bookmarks.filter(x => x.id !== entry.card.id);
+    S().edges = S().edges.filter(e => e.a !== entry.card.id && e.b !== entry.card.id);
+  }
+  function undo() {
+    const entry = undoStack.pop();
+    if (!entry) return false;
+    redoStack.push(entry); restore(entry); toast('Restored to Canvas');
+    return true;
+  }
+  function redo() {
+    const entry = redoStack.pop();
+    if (!entry) return false;
+    undoStack.push(entry); removeCard(entry); save(); draw(); Rainbow.render?.(); toast('Removed from Canvas');
+    return true;
   }
   function remove(id) {
-    S().bookmarks = S().bookmarks.filter(b => b.id !== id);
-    S().edges = S().edges.filter(e => e.a !== id && e.b !== id);
-    save(); draw(); Wave.render();
+    const b = S().bookmarks.find(x => x.id === id);
+    if (!b) return;
+    pushUndo(snapshot(b));
+    if (b.media) trash.set(b.id, setTimeout(() => { Rainbow.delMedia?.(b.media); trash.delete(b.id); }, 60000));
+    removeCard({ card: b });
+    save(); draw(); Rainbow.render();
+    toast('Removed · Ctrl+Z to undo');
   }
   function connect(a, b) {
     if (a === b || S().edges.some(e => (e.a === a && e.b === b) || (e.a === b && e.b === a))) return;
@@ -133,7 +182,10 @@
 
   /* ---------- drawing ---------- */
   const isStale = b => b.kind === 'link' && Date.now() - (b.lastVisit || b.created) > STALE;
-  const matches = b => (!filter || b.topic === filter) && (!query || [b.title, b.note, b.url, b.topic].some(x => (x || '').toLowerCase().includes(query)));
+  /* Search runs over the words visible inside a screenshot too (`b.ocr`), so a capture is found by
+     its content and not just its filename. */
+  const haystack = b => [b.title, b.note, b.url, b.topic, b.ocr];
+  const matches = b => (!filter || b.topic === filter) && (!query || haystack(b).some(x => (x || '').toLowerCase().includes(query)));
 
   function cardEl(b) {
     const dim = !matches(b);
@@ -144,7 +196,9 @@
       inner = h('div', { class: 'cv-float' }, h('p', { class: 'cv-quote' }, b.note));
     } else if (b.kind === 'image') {
       inner = h('div', { class: 'cv-float' }, h('img', { class: 'cv-cutout', src: b.image, alt: b.title || '', draggable: false }),
-        b.title ? h('p', { class: 'cv-caption' }, b.title) : null);
+        b.title ? h('p', { class: 'cv-caption' }, b.title) : null,
+        // A quiet mark that the words inside this capture are searchable.
+        b.ocr ? h('span', { class: 'cv-txt', title: b.ocr.slice(0, 400) }, 'text') : null);
     } else {
       inner = h('div', { class: 'cv-float cv-paper' },
         b.image ? h('div', { class: 'cv-media' }, h('img', { src: b.image, alt: '', draggable: false, onerror: e => e.target.parentElement.remove() }),
@@ -252,7 +306,10 @@
     const card = e.target.closest('.cv-card');
     const knob = e.target.closest('.cv-knob');
     const b = card && S().bookmarks.find(x => x.id === +card.dataset.id);
-    vp.setPointerCapture(e.pointerId);
+    // A pointer can already be gone (a fast tap, a pen, an assistive or synthetic event); capture
+    // is a nicety, and letting it throw would abandon the rest of this handler and the card would
+    // never open.
+    try { vp.setPointerCapture(e.pointerId); } catch { /* the window still reports the move */ }
     if (knob || (b && e.altKey)) {
       connectFrom = b;
       drag = { kind: 'connect', b };
@@ -313,11 +370,11 @@
   });
   vp.addEventListener('contextmenu', e => {
     const card = e.target.closest('.cv-card'), path = e.target.closest('path[data-a]');
-    if (path) { e.preventDefault(); Wave.menu(e.clientX, e.clientY, [['Remove connection', () => { S().edges = S().edges.filter(x => !(x.a === +path.dataset.a && x.b === +path.dataset.b)); save(); drawEdges(); }, 'danger']]); return; }
+    if (path) { e.preventDefault(); Rainbow.menu(e.clientX, e.clientY, [['Remove connection', () => { S().edges = S().edges.filter(x => !(x.a === +path.dataset.a && x.b === +path.dataset.b)); save(); drawEdges(); }, 'danger']]); return; }
     if (!card) return;
     e.preventDefault();
     const b = S().bookmarks.find(x => x.id === +card.dataset.id);
-    Wave.menu(e.clientX, e.clientY, [
+    Rainbow.menu(e.clientX, e.clientY, [
       ...(b.url ? [['Revisit', () => revisit(b)], ['Copy link', () => navigator.clipboard?.writeText(b.url)]] : []),
       ['Open card', () => openCard(b)],
       ['Connect to…', () => { connectFrom = b; toast('Click the card to connect to'); }],
@@ -334,7 +391,7 @@
   function nearestTopic(p) {
     let best = null, dist = Infinity;
     for (const b of S().bookmarks) { const d = (b.x - p.x) ** 2 + (b.y - p.y) ** 2; if (d < dist) { dist = d; best = b.topic; } }
-    return best || Wave.space().name;
+    return best || Rainbow.space().name;
   }
 
   /* ---------- drop & paste ---------- */
@@ -342,7 +399,7 @@
   vp.addEventListener('drop', async e => {
     e.preventDefault();
     const p = toWorld(e.clientX, e.clientY), at = { x: Math.round(p.x - 120), y: Math.round(p.y - 120), topic: filter || nearestTopic(p) };
-    const tabId = +e.dataTransfer.getData('wave/tab');
+    const tabId = +e.dataTransfer.getData('rainbow/tab');
     if (tabId) return saveTab(tabId, at);
     for (const f of e.dataTransfer.files) if (f.type.startsWith('image/')) {
       add({ kind: 'image', image: await shrink(URL.createObjectURL(f), 720), title: f.name.replace(/\.\w+$/, ''), ...at });
@@ -353,7 +410,7 @@
     else if (!e.dataTransfer.files.length && e.dataTransfer.getData('text/plain')) addNote(e.dataTransfer.getData('text/plain').slice(0, 600), at);
   });
   addEventListener('paste', async e => {
-    if (Wave.view !== 'canvas' || e.target.closest?.('input,textarea')) return;
+    if (Rainbow.view !== 'canvas' || e.target.closest?.('input,textarea')) return;
     const r = vp.getBoundingClientRect(), p = toWorld(r.left + r.width / 2, r.top + r.height / 2);
     const at = { x: Math.round(p.x - 120), y: Math.round(p.y - 120), topic: filter || nearestTopic(p) };
     const img = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
@@ -374,13 +431,15 @@
       b.image ? h('div', { class: 'cv-hero' }, h('img', { src: b.image, alt: '' })) : null,
       h('div', { class: 'cv-sheet-body' },
         h('div', { class: 'cv-meta' }, h('i', { style: `background:${topicColor(b.topic)}` }),
-          h('select', { 'aria-label': 'Topic', onchange: e => { const t = e.target.value === '+' ? prompt('New topic name')?.trim() : e.target.value; if (t) { b.topic = t; Object.assign(b, place(t, b.w)); save(); } } },
+          h('select', { 'aria-label': 'Topic', onchange: e => { const t = e.target.value === '+' ? prompt('New topic name')?.trim() : e.target.value; if (t) { b.topic = t; b.userTopic = true; Object.assign(b, place(t, b.w)); save(); } } },
             [...new Set([...topics(), b.topic])].map(t => h('option', { value: t, selected: t === b.topic }, t)), h('option', { value: '+' }, 'New topic…')),
           b.url ? h('span', {}, hostOf(b.url)) : null,
           h('span', {}, `Saved ${new Date(b.created).toLocaleDateString()}`),
           b.url ? h('span', {}, b.visits ? `Revisited ${b.visits}×` : 'Not revisited yet') : null),
         b.kind !== 'note' ? title : null,
         note,
+        b.ocrState === 'pending' ? h('p', { class: 'cv-ocr pending' }, 'Reading the text…')
+          : b.ocr ? h('div', { class: 'cv-ocr' }, h('span', { class: 'cv-ocr-t' }, 'Text found in this capture'), h('p', {}, b.ocr)) : null,
         b.shot ? h('img', { class: 'cv-shot', src: b.shot, alt: 'Screenshot when saved' }) : null),
       h('footer', {},
         h('button', { class: 'cv-btn', onclick: () => { remove(b.id); closeCard(); } }, 'Remove'),
@@ -416,7 +475,7 @@
   }
 
   /* ---------- discover ---------- */
-  /* Pick a mood and a subject; Wave finds a Wikipedia article that fits and drops it
+  /* Pick a mood and a subject; Rainbow finds a Wikipedia article that fits and drops it
      on the board under that subject. ponytail: the mood is a search hint, not a model. */
   const MOODS = { surprising: 'unexpected discovery', strange: 'unusual phenomenon', anything: '', useful: 'how it works practical' };
   const SUBJECTS = ['science', 'space', 'psychology', 'geography', 'history', 'art', 'music', 'nature', 'technology', 'food', 'language', 'architecture'];
@@ -474,16 +533,17 @@
     if (e.key === 'Escape') { e.target.value = ''; query = ''; draw(); e.target.blur(); e.stopPropagation(); }
   });
   addEventListener('keydown', e => {
-    if (Wave.view !== 'canvas' || e.target.closest?.('input,textarea,[contenteditable]')) return;
+    if (Rainbow.view !== 'canvas' || e.target.closest?.('input,textarea,[contenteditable]')) return;
     if (e.key === '/') { e.preventDefault(); $('#cvSearch').focus(); }
     if (e.key === 'Escape') { closeCard(); $('#cvCol').hidden = true; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
   });
   $('#cvSurprise').onclick = () => { const bs = S().bookmarks; if (bs.length) flyToCard(bs[Math.floor(Math.random() * bs.length)]); };
-  $('#cvAdd').onclick = e => Wave.menu(e.clientX - 120, e.clientY + 16, [
-    ['Save current tab', () => Wave.activeTab() ? saveTab(Wave.activeTab().id) : toast('No tab open')],
-    ['Add a link…', () => { const u = prompt('Link'); if (u) { const url = Wave.toUrl(u); const b = saveUrl(url, hostOf(url)); flyToCard(b); } }],
+  $('#cvAdd').onclick = e => Rainbow.menu(e.clientX - 120, e.clientY + 16, [
+    ['Save current tab', () => Rainbow.activeTab() ? saveTab(Rainbow.activeTab().id) : toast('No tab open')],
+    ['Add a link…', () => { const u = prompt('Link'); if (u) { const url = Rainbow.toUrl(u); const b = saveUrl(url, hostOf(url)); flyToCard(b); } }],
     ['Write a note', () => { const r = vp.getBoundingClientRect(); const p = toWorld(r.left + r.width / 2, r.top + r.height / 2); openCard(addNote('New note', { x: p.x - 115, y: p.y, topic: filter || nearestTopic(p) }), true); }],
-    ['Add all open tabs in this space', () => { const s = Wave.space(); [...s.pinned, ...s.today].forEach(id => Wave.tab(id) && saveUrl(Wave.tab(id).url, Wave.tab(id).title)); }],
+    ['Add all open tabs in this space', () => { const s = Rainbow.space(); [...s.pinned, ...s.today].forEach(id => Rainbow.tab(id) && saveUrl(Rainbow.tab(id).url, Rainbow.tab(id).title)); }],
   ]);
   $('#cvCollection').onclick = () => openCollection('discovered');
   $('#cvDiscover').onclick = discover;
@@ -493,7 +553,7 @@
   $('#cvHome').onclick = () => fit();
 
   /* Sorting. A small model that runs on this machine decides which topic a captured card belongs to.
-     Until one is installed (set `Wave.localModel = { classify(card) }`) a keyword scorer answers the same
+     Until one is installed (set `Rainbow.localModel = { classify(card) }`) a keyword scorer answers the same
      call, so nothing else changes the day the model arrives. */
   const TOPICS = {
     Code: ['github', 'code', 'api', 'rust', 'python', 'javascript', 'typescript', 'react', 'component', 'frontend', 'backend', 'database', 'css', 'html', 'server', 'debug', 'framework', 'library', 'developer', 'function', 'compiler', 'stack', 'bug', 'repo', 'software', 'programming'],
@@ -519,10 +579,10 @@
     return best;
   }
   async function classify({ title = '', text = '', url = '' } = {}) {
-    if (Wave.localModel?.classify) {
-      try { const t = await Wave.localModel.classify({ title, text, url, topics: Object.keys(TOPICS), existing: topics() }); if (t) return String(t); } catch {}
+    if (Rainbow.localModel?.classify) {
+      try { const t = await Rainbow.localModel.classify({ title, text, url, topics: Object.keys(TOPICS), existing: topics() }); if (t) return String(t); } catch {}
     }
-    return scoreTopic(`${title} ${text} ${hostOf(url)}`) || (url ? Wave.siteName(url) : 'Saved');
+    return scoreTopic(`${title} ${text} ${hostOf(url)}`) || (url ? Rainbow.siteName(url) : 'Saved');
   }
   /* Right-click an image, or select text and right-click: it lands on the Canvas, under the topic the
      classifier picks. */
@@ -535,11 +595,31 @@
     return b;
   }
 
-  Wave.canvas = {
+  /* A capture is saved before it is understood. This runs afterwards: read the text out of the
+     image, keep it for search, then let the classifier name the topic. A topic the user chose by
+     hand (`userTopic`) is never overwritten. */
+  async function enrich(id, dataUrl) {
+    const b = S().bookmarks.find(x => x.id === id);
+    if (!b || !dataUrl) return;
+    if (!b.ocr) { b.ocrState = 'pending'; draw(); }
+    const r = await Rainbow.ocr?.(dataUrl);
+    // A screenshot can be a whole article; the first few thousand characters are plenty to search
+    // by, and the store stays small until captures move to files (see roadmap).
+    const text = (r?.text || '').trim().slice(0, 6000);
+    if (text) { b.ocr = text; b.ocrLines = (r.lines || []).slice(0, 200); }
+    b.ocrState = text ? 'done' : 'none';
+    if (!b.userTopic) {
+      const topic = await classify({ title: b.title, text: b.ocr || '', url: b.url });
+      if (topic && topic !== b.topic) { b.topic = topic; Object.assign(b, place(topic, b.w)); }
+    }
+    save(); draw(); Rainbow.render?.();
+  }
+
+  Rainbow.canvas = {
     topicWords: () => TOPICS,
-    capture, classify, saveTab, saveUrl, addNote, add, remove, connect, touch, fit, flyToCard, openCollection, discover,
+    capture, classify, saveTab, saveUrl, addNote, add, remove, undo, redo, connect, touch, fit, flyToCard, openCollection, discover, enrich,
     showTopic: t => { setFilter(t); flyToTopic(t); },
-    find: q => S().bookmarks.filter(b => [b.title, b.note, b.url, b.topic].some(x => (x || '').toLowerCase().includes(q.toLowerCase()))),
+    find: q => S().bookmarks.filter(b => haystack(b).some(x => (x || '').toLowerCase().includes(q.toLowerCase()))),
     show() { countLabel(); draw(); if (!fitted) { fitted = true; fit(); } else apply(); },
     hide() { closeCard(); $('#cvCol').hidden = true; },
     redraw: draw,

@@ -1,10 +1,10 @@
-/* Wave chrome. Space colours come in as --a/--b/--c from wave.js; everything else derives. */
+/* Rainbow chrome. Space colours come in as --a/--b/--c from rainbow.js; everything else derives. */
 :root {
   --a: #7fb2c9; --b: #c8d9c0; --c: #c8d9c0;
   --ink: #12222b; --ink-2: rgba(18, 34, 43, .62); --ink-3: rgba(18, 34, 43, .38);
   --hover: rgba(255, 255, 255, .34); --active: rgba(255, 255, 255, .72);
   --line: rgba(18, 34, 43, .1);
-  --side-w: 248px; --inset: 8px; --radius: 10px;
+  --side-w: 248px; --inset: 8px; --radius: 8px;
   --row: 34px; --blur: 26px;
   --glass: rgba(250, 251, 250, .78); --glass-ink: #10181d; --glass-line: rgba(16, 24, 29, .08); --menu: rgba(250, 251, 250, .96);
   --shadow: 0 1px 2px rgba(0,0,0,.06), 0 12px 32px -8px rgba(0,0,0,.22);
@@ -72,8 +72,12 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
    sidebar, and it must not push the page aside to get it. */
 .app.collapsed.peek .sidebar,
 .app.rail-grow .sidebar {
-  position: fixed; inset: 0 auto 0 0; width: var(--peek-w); z-index: 30;
-  padding: 6px 6px 8px 8px; align-items: stretch;
+  /* A floating panel, not a slab: the same inset and radius as the page card, so the corners
+     read against the page behind it. */
+  position: fixed; inset: var(--inset) auto var(--inset) var(--inset);
+  width: calc(var(--peek-w) - var(--inset) * 2); z-index: 30;
+  padding: 20px 6px 8px 8px; align-items: stretch;
+  border-radius: var(--radius);
   /* background-attachment: fixed keeps the gradient identical to the collapsed rail's, so the
      sidebar does not change colour when it floats out. */
   background: var(--space-grad); background-attachment: fixed;
@@ -81,18 +85,19 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
   animation: peek-fade var(--motion) var(--ease);
   transition: opacity var(--motion) var(--ease), transform var(--motion) var(--ease);
 }
+/* The Windows sidebar rule trims the top padding for the topbar; the floating panel keeps its
+   own breathing room above Essentials. */
+:root[data-os="windows"] .app.collapsed.peek .sidebar,
+:root[data-os="windows"] .app.rail-grow .sidebar { padding-top: 20px; }
 /* Leaving: fade and drift back towards the edge it came from, rather than snapping shut. */
 .app.peek-out .sidebar { opacity: 0; transform: translateX(-7px); }
 :root[data-side="right"] .app.peek-out .sidebar { transform: translateX(7px); }
 :root[data-side="right"] .app.collapsed.peek .sidebar,
 :root[data-side="right"] .app.rail-grow .sidebar {
-  inset: 0 0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,.07), -14px 0 34px -14px rgba(0,0,0,.4);
+  inset: var(--inset) var(--inset) var(--inset) auto;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.07), -14px 0 34px -14px rgba(0,0,0,.4);
 }
-/* Windows draws the backdrop as a flat Mica, so the overlay needs the same flat fill. */
-:root[data-os="windows"] .app.collapsed.peek .sidebar,
-:root[data-os="windows"] .app.rail-grow .sidebar {
-  background: color-mix(in oklab, var(--a) 22%, var(--mica));
-}
+/* The floating panel is part of the same shell, so it keeps the same gradient. */
 @keyframes peek-fade { from { opacity: 0; transform: translateX(calc(var(--dir, -1) * 14px)); } }
 :root[data-side="right"] { --dir: 1; }
 @media (prefers-reduced-motion: reduce) { .app.collapsed.peek .sidebar, .app.rail-grow .sidebar { animation: none; } }
@@ -110,7 +115,14 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .page, .page iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .page iframe { background: #fff; }
 .empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; color: #5d6b72; text-align: center; }
-.empty-mark { width: 54px; height: 54px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff 0 18%, transparent 19%), var(--space-grad); box-shadow: inset 0 -6px 14px rgba(0,0,0,.12); }
+/* Rainbow, not the old water drop: a colour ring for the empty page. */
+.empty-mark {
+  width: 58px; height: 58px; border-radius: 50%;
+  background: conic-gradient(from 210deg, #e88a8a, #e9bf72, #9ed49b, #79b8d6, #a493d8, #e88a8a);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  opacity: .88;
+}
 
 /* ---------- sidebar pieces ---------- */
 .side-top { display: flex; align-items: center; justify-content: space-between; height: 30px; flex: none; }
@@ -132,15 +144,18 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 
 .url-pill {
   display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 6px 0 4px; border-radius: 9px; flex: none;
-  background: rgba(255,255,255,.28); color: var(--ink); cursor: text;
+  /* Tinted with the same ink that writes the address, so the pill cannot drift out of contrast
+     when the space theme is light and the system mode is dark (or the other way round). */
+  background: color-mix(in oklab, var(--ink) 8%, transparent); color: var(--ink); cursor: text;
   transition: background .2s var(--ease), box-shadow .2s var(--ease);
 }
-:root[data-ink="light"] .url-pill { background: rgba(255,255,255,.1); }
-.url-pill:hover { background: rgba(255,255,255,.42); }
+:root[data-ink="light"] .url-pill { background: color-mix(in oklab, var(--ink) 9%, transparent); }
+.url-pill:hover { background: color-mix(in oklab, var(--ink) 13%, transparent); }
+:root[data-ink="light"] .url-pill:hover { background: color-mix(in oklab, var(--ink) 15%, transparent); }
 /* Copying a link confirms where the click happened: the pill brightens and the address
    becomes the confirmation for a moment, instead of a toast in a corner nobody is looking at. */
-.url-pill.copied { background: rgba(255,255,255,.62); box-shadow: 0 0 0 1px rgba(255,255,255,.55), 0 2px 10px -4px rgba(0,0,0,.25); }
-:root[data-ink="light"] .url-pill.copied { background: rgba(255,255,255,.26); box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 2px 10px -4px rgba(0,0,0,.35); }
+.url-pill.copied { background: color-mix(in oklab, var(--ink) 16%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 16%, transparent), 0 2px 10px -4px rgba(0,0,0,.25); }
+:root[data-ink="light"] .url-pill.copied { background: color-mix(in oklab, var(--ink) 18%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 16%, transparent), 0 2px 10px -4px rgba(0,0,0,.35); }
 .url-pill.copied .url-copy, .url-pill.copied .url-text { color: var(--ink); }
 /* The icon agrees with the text: link -> check while the pill is lit. */
 .url-copy .ic-ok { display: none; }
@@ -149,7 +164,8 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 @keyframes okPop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .url-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; transition: color .2s var(--ease); }
 .url-text.placeholder { color: var(--ink-2); font-weight: 400; }
-.url-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+.url-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; flex: none; }
+.url-actions .icon-btn { flex: none; }
 .url-pill:hover .url-actions, .url-actions .on { opacity: 1; }
 .url-copy, .url-opts { flex: none; width: 22px; height: 22px; color: var(--ink-2); }
 .url-copy:hover, .url-opts:hover { color: var(--ink); }
@@ -159,8 +175,20 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .url-copy, .url-opts, .url-actions .icon-btn { color: var(--ink); opacity: .85; }
 .url-copy:hover, .url-opts:hover, .url-actions .icon-btn:hover { opacity: 1; }
 .url-copy svg, .url-opts svg, .url-actions .icon-btn svg { stroke-width: 1.7; }
-.url-opts { opacity: .55; transition: opacity .12s, background .12s, color .12s; }
+/* The sliders are two short tracks with one knob each. A line run straight through a filled
+   knob turns into a smudge at 14 px; gap the tracks and outline the knobs instead. */
+/* Yalqen's icon grammar: 16 px, one 16-unit path, 1.4 stroke. The address controls use it so
+   their tracks and knobs stay crisp at native scale. */
+.icon-btn.sm.url-copy svg, .icon-btn.sm.url-opts svg { width: 16px; height: 16px; stroke-width: 1.4; }
+/* A control on a light pill, not decoration: at 55% it read as a ghosted smear. */
+.url-opts { opacity: .8; transition: opacity .12s, background .12s, color .12s; }
 .url-pill:hover .url-opts { opacity: 1; }
+/* Narrow address bars drop the optional controls instead of squeezing them into one another.
+   The link options stay longest because they are the way into the site popover. */
+.url-pill { container-type: inline-size; }
+@container (max-width: 230px) { .url-copy { display: none; } }
+@container (max-width: 190px) { .url-actions { display: none; } }
+@container (max-width: 110px) { .url-opts { display: none; } }
 
 .essentials { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
 .essentials:empty { display: none; }
@@ -200,7 +228,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
    the drop target, so "nothing here yet" and "put something here" are the same drawing. */
 .zone {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  border: 1px dashed color-mix(in oklab, var(--ink) 26%, transparent); border-radius: 10px;
+  border: 1px dashed color-mix(in oklab, var(--ink) 26%, transparent); border-radius: var(--radius);
   color: var(--ink-2); text-align: center; padding: 10px 8px; min-width: 0;
   background: color-mix(in oklab, var(--ink) 3%, transparent);
   transition: border-color .14s, background .14s, color .14s;
@@ -279,7 +307,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
   width: min(660px, calc(100vw - 32px)); color: var(--glass-ink);
   /* A short window must not push the bar off the bottom: the list is the part that gives. */
   max-height: calc(100vh - 15vh - 16px); display: flex; flex-direction: column;
-  background: var(--glass); border-radius: 16px;
+  background: var(--glass); border-radius: var(--radius);
   box-shadow: var(--shadow), 0 0 0 1px var(--glass-line), 0 26px 64px -26px color-mix(in oklab, var(--a) 60%, transparent);
   backdrop-filter: blur(30px) saturate(1.5); -webkit-backdrop-filter: blur(30px) saturate(1.5);
   overflow: hidden; isolation: isolate; animation: pop .16s var(--ease);
@@ -329,11 +357,11 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .cmd-foot span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmd-foot kbd { background: color-mix(in oklab, var(--glass-ink) 8%, transparent); border-color: transparent; }
 
-/* Ask Wave: a fifth of the window tall, low on the screen, everything else blurred away. */
+/* Ask Rainbow: a fifth of the window tall, low on the screen, everything else blurred away. */
 .ask {
   position: fixed; z-index: 50; left: 50%; bottom: 9vh; transform: translateX(-50%);
   width: min(760px, calc(100vw - 48px)); height: 20vh; min-height: 168px; max-height: 260px;
-  display: flex; flex-direction: column; border-radius: 22px; overflow: visible;
+  display: flex; flex-direction: column; border-radius: var(--radius); overflow: visible;
   background: var(--glass); color: var(--glass-ink);
   box-shadow:
     0 30px 80px -20px rgba(0,0,0,.35), 0 0 0 1px var(--glass-line),
@@ -360,11 +388,17 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .msg.user { align-self: flex-end; background: color-mix(in oklab, var(--a) 30%, transparent); padding: 6px 12px; border-radius: 14px 14px 4px 14px; }
 .msg.bot { align-self: flex-start; }
 .msg.err { color: #c0392b; }
+/* Working state and its Stop, plus Retry on a failed request: both live where the outcome appears. */
+.msg.working { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: color-mix(in oklab, var(--glass-ink) 62%, transparent); }
+.msg.working .spark { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--a); animation: pulse 1s infinite; }
+.msg .retry { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 500;
+  background: color-mix(in oklab, var(--glass-ink) 8%, transparent); color: var(--glass-ink); }
+.msg .retry:hover { background: color-mix(in oklab, var(--glass-ink) 14%, transparent); }
 .act { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 9px 3px 7px; border-radius: 999px; background: color-mix(in oklab, var(--glass-ink) 7%, transparent); color: color-mix(in oklab, var(--glass-ink) 75%, transparent); }
 .act::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #2e9d62; }
 .act.pending::before { background: #d6a02a; animation: pulse 1s infinite; }
 .act.fail::before { background: #c0392b; }
-.confirm { align-self: flex-start; display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 6px 6px 12px; border-radius: 12px; background: color-mix(in oklab, #d6a02a 16%, transparent); }
+.confirm { align-self: flex-start; display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 6px 6px 12px; border-radius: var(--radius); background: color-mix(in oklab, #d6a02a 16%, transparent); }
 .confirm button { padding: 4px 10px; border-radius: 8px; background: color-mix(in oklab, var(--glass-ink) 8%, transparent); }
 .confirm button.yes { background: var(--glass-ink); color: var(--glass); }
 .ask-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px; }
@@ -381,7 +415,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .ask-send:hover { filter: brightness(1.1); }
 .ask-send:active { transform: scale(.94); }
 .ask-send:disabled { opacity: .3; box-shadow: none; }
-.model-menu { position: absolute; left: 10px; bottom: 54px; list-style: none; margin: 0; padding: 5px; border-radius: 12px; min-width: 260px; background: var(--glass); color: var(--glass-ink); box-shadow: var(--shadow), 0 0 0 1px var(--glass-line); backdrop-filter: blur(30px); }
+.model-menu { position: absolute; left: 10px; bottom: 54px; list-style: none; margin: 0; padding: 5px; border-radius: var(--radius); min-width: 260px; background: var(--glass); color: var(--glass-ink); box-shadow: var(--shadow), 0 0 0 1px var(--glass-line); backdrop-filter: blur(30px); }
 .model-menu li { padding: 7px 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 1px; }
 .model-menu li small { font-size: 11px; opacity: .55; }
 .model-menu li:hover, .model-menu li.sel { background: color-mix(in oklab, var(--a) 26%, transparent); }
@@ -389,7 +423,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .panel {
   position: fixed; z-index: 55; top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: min(560px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 48px)); display: flex; flex-direction: column;
-  background: var(--glass); color: var(--glass-ink); border-radius: 16px; box-shadow: var(--shadow), 0 0 0 1px var(--glass-line);
+  background: var(--glass); color: var(--glass-ink); border-radius: var(--radius); box-shadow: var(--shadow), 0 0 0 1px var(--glass-line);
   backdrop-filter: blur(36px) saturate(1.4); -webkit-backdrop-filter: blur(36px) saturate(1.4); user-select: text;
 }
 .panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 6px 20px; }
@@ -403,8 +437,8 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 }
 .panel textarea { font: 12px/1.45 ui-monospace, "Cascadia Code", Consolas, monospace; min-height: 96px; resize: vertical; }
 .field input[type="color"] { width: 40px; height: 28px; border: 0; padding: 0; background: none; }
-.seg { display: inline-flex; padding: 2px; border-radius: 9px; background: color-mix(in oklab, var(--glass-ink) 7%, transparent); }
-.seg button { padding: 5px 12px; border-radius: 7px; font-size: 12px; }
+.seg { display: inline-flex; flex-wrap: wrap; padding: 2px; border-radius: 9px; background: color-mix(in oklab, var(--glass-ink) 7%, transparent); }
+.seg button { padding: 5px 12px; border-radius: 7px; font-size: 12px; white-space: nowrap; }
 .seg button.on { background: var(--glass); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
 .swatch { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); }
@@ -416,7 +450,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .btn:hover { filter: brightness(1.05); }
 
 .menu {
-  position: fixed; z-index: 60; min-width: 200px; padding: 5px; border-radius: 11px;
+  position: fixed; z-index: 60; min-width: 200px; padding: 5px; border-radius: var(--radius);
   background: var(--menu); color: var(--glass-ink); box-shadow: var(--shadow), 0 0 0 1px var(--glass-line);
   backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4); animation: fade .1s;
 }
@@ -434,7 +468,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
    then rows — one of them holding a "+", one holding a switch, one holding a "…" that opens
    the site's own settings. */
 .sitepop {
-  position: fixed; z-index: 60; width: 264px; padding: 5px; border-radius: 12px;
+  position: fixed; z-index: 60; width: 264px; padding: 5px; border-radius: var(--radius);
   background: var(--menu); color: var(--glass-ink);
   box-shadow: var(--shadow), 0 0 0 1px var(--glass-line);
   backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4);
@@ -484,7 +518,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 }
 .st-bar {
   position: absolute; top: 10px; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 6px;
-  padding: 6px; border-radius: 11px; cursor: default;
+  padding: 6px; border-radius: var(--radius); cursor: default;
   background: var(--menu); color: var(--glass-ink);
   box-shadow: var(--shadow), 0 0 0 1px var(--glass-line);
   backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4);
@@ -507,7 +541,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .menu .mi-ico svg { width: 16px; height: 16px; }
 
 /* Over the sidebar, not the page: a native page view would hide it. */
-.toast { position: fixed; z-index: 70; left: 12px; bottom: 48px; max-width: calc(var(--side-w) - 24px); padding: 8px 14px; border-radius: 10px; background: #12181c; color: #fff; font-size: 12px; box-shadow: var(--shadow); animation: fade .15s; }
+.toast { position: fixed; z-index: 70; left: 12px; bottom: 48px; max-width: calc(var(--side-w) - 24px); padding: 8px 14px; border-radius: var(--radius); background: #12181c; color: #fff; font-size: 12px; box-shadow: var(--shadow); animation: fade .15s; }
 
 .resize-edges i { position: fixed; z-index: 80; }
 .resize-edges [data-dir="n"] { top: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
@@ -536,11 +570,12 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .app .page-card.split { background: transparent; box-shadow: none; }
 .split-divider { position: absolute; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 2; }
 .split-divider.col { top: auto; bottom: auto; left: 0; right: 0; width: auto; height: 8px; cursor: row-resize; }
-.split-divider::after { content: ""; position: absolute; left: 3px; top: 50%; width: 2px; height: 36px; margin-top: -18px; border-radius: 2px; background: color-mix(in oklab, var(--ink) 25%, transparent); opacity: 0; transition: opacity .15s; }
+/* A faint handle at rest: the split is resizable, and a control nobody can see is not discoverable. */
+.split-divider::after { content: ""; position: absolute; left: 3px; top: 50%; width: 2px; height: 36px; margin-top: -18px; border-radius: 2px; background: color-mix(in oklab, var(--ink) 25%, transparent); opacity: .35; transition: opacity .15s; }
 .split-divider.col::after { left: 50%; top: 3px; width: 36px; height: 2px; margin: 0 0 0 -18px; }
 .split-divider:hover::after { opacity: 1; }
 
-/* Ask Wave blurs only a band along the bottom; the page above stays live. The blur is a
+/* Ask Rainbow blurs only a band along the bottom; the page above stays live. The blur is a
    pool, not a rectangle: one radial mask fades it out on the top and both sides, so it
    dissolves into the page the way the chrome's own gradient does. */
 .veil.low {
@@ -559,7 +594,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .lib-rail button:hover { background: var(--hover); color: var(--ink); }
 .lib-rail button.on { background: color-mix(in oklab, var(--ink) 12%, transparent); color: var(--ink); }
 .lib-rail svg { width: 17px; height: 17px; }
-.lib-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; background: color-mix(in oklab, var(--ink) 5%, transparent); border-radius: 12px; padding: 10px 8px 8px; }
+.lib-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; background: color-mix(in oklab, var(--ink) 5%, transparent); border-radius: var(--radius); padding: 10px 8px 8px; }
 .lib-panel header { display: flex; align-items: center; gap: 6px; padding: 0 2px; }
 .lib-panel h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; }
 .lib-search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border-radius: 8px; background: color-mix(in oklab, var(--ink) 7%, transparent); color: var(--ink-2); }
@@ -573,8 +608,9 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .lib-item small { color: var(--ink-3); font-size: 11px; white-space: nowrap; }
 .lib-item .emoji { width: 18px; text-align: center; }
 .lib-empty { padding: 12px 6px; color: var(--ink-3); font-size: 12px; line-height: 1.45; }
-.lib-actions { display: flex; gap: 6px; }
-.lib-actions .btn { flex: 1; }
+.lib-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Grow to share the row, but never break a two-word label down the middle; wrap the row instead. */
+.lib-actions .btn { flex: 1 1 auto; white-space: nowrap; }
 .mode-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 5px 10px; border-radius: 999px; color: color-mix(in oklab, var(--glass-ink) 70%, transparent); }
 .mode-btn svg { width: 14px; height: 14px; }
 .mode-btn:hover { background: color-mix(in oklab, var(--glass-ink) 7%, transparent); }
@@ -595,7 +631,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .set-h { margin: 8px 0 0; font-size: 15px; font-weight: 600; }
 .set-h:first-child { margin-top: 0; }
 .layout-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.layout-card { display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 8px 6px 10px; border-radius: 12px; font-size: 12px; box-shadow: 0 0 0 1px var(--glass-line); }
+.layout-card { display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 8px 6px 10px; border-radius: var(--radius); font-size: 12px; box-shadow: 0 0 0 1px var(--glass-line); }
 .layout-card:hover { background: color-mix(in oklab, var(--glass-ink) 5%, transparent); }
 .layout-card.on { box-shadow: 0 0 0 2px var(--accent, var(--glass-ink)); }
 .layout-card .art { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden; background: var(--space-grad); }
@@ -606,6 +642,27 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .art.sidebar .top { display: none; } .art.sidebar .bar { left: 5%; top: 8%; bottom: 8%; width: 22%; } .art.sidebar .page { left: 31%; right: 5%; top: 8%; bottom: 8%; }
 .art.toolbar .top { left: 5%; right: 5%; top: 7%; height: 12%; } .art.toolbar .bar { left: 5%; top: 24%; bottom: 8%; width: 22%; } .art.toolbar .page { left: 31%; right: 5%; top: 24%; bottom: 8%; }
 .art.rail .top { display: none; } .art.rail .bar { left: 5%; top: 8%; bottom: 8%; width: 7%; } .art.rail .page { left: 15%; right: 5%; top: 8%; bottom: 8%; }
+/* Settings is a page in the frame, not a floating panel: the page card's own background and
+   radius, with the same nav rail. It sits where a website would, so the browser around it stays. */
+.settings-view { position: absolute; inset: 0; overflow: hidden; background: #fff; color: var(--ink);
+  --settings-bg: #fff; --glass-ink: var(--ink); --glass: var(--settings-bg); --glass-line: var(--line); }
+:root[data-mode="dark"] .settings-view { background: #16191c; --settings-bg: #16191c; }
+.set-shell { display: flex; flex-direction: column; height: 100%; }
+.set-top { display: flex; align-items: center; gap: 8px; flex: none; height: 46px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.set-title { margin: 0; flex: 1; font-size: 14px; font-weight: 600; }
+.set-shell .set-page { flex: 1; min-height: 0; height: auto; }
+.settings-view .set-nav { width: 210px; padding: 12px 8px; border-right: 1px solid var(--line); }
+.settings-view .set-body { padding: 18px 26px 26px; }
+.settings-view .layout-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+@media (max-width: 980px) {
+  /* Label above the control: the settings body is the page's width, not a 560px panel. */
+  .settings-view .field { grid-template-columns: 1fr; gap: 6px; }
+}
+@media (max-width: 720px) {
+  .settings-view .set-page { flex-direction: column; }
+  .settings-view .set-nav { width: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .settings-view .set-nav button { white-space: nowrap; }
+}
 .profile-row { display: flex; align-items: center; gap: 10px; }
 .profile-row input { width: 170px; }
 .profile-row .hint { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -645,7 +702,9 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .cbar {
   position: fixed; top: 0; left: 0; right: 0; height: var(--cbar-h); z-index: 30;
   display: none; align-items: center; gap: 6px; padding: 0 8px;
-  background: color-mix(in oklab, var(--a) 34%, var(--glass));
+  /* A tint of the space colour, not the mode's glass: the bar carries the same ink as the
+     sidebar, so it has to share the same light/dark decision. */
+  background: color-mix(in oklab, var(--a) 46%, transparent);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(calc(var(--blur) + 10px)) saturate(1.7); -webkit-backdrop-filter: blur(calc(var(--blur) + 10px)) saturate(1.7);
   transition: transform var(--motion) var(--ease), opacity var(--motion) var(--ease), padding-left var(--motion) var(--ease), padding-right var(--motion) var(--ease);
@@ -658,6 +717,10 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-layout="compact"][data-side="right"] .cbar { left: 0; right: var(--side-cur, 0px); padding-left: 8px; padding-right: 8px; }
 :root[data-layout="compact"] .topbar, :root[data-layout="compact"] .sidebar-resizer { display: none; }
 :root[data-layout="compact"] .side-top { display: none; }
+/* With the sidebar deployed in compact, the bar stays over the page column so the sidebar's
+   gradient reaches the top edge. Push the content below the bar so Essentials start under the
+   navigation instead of level with it. The collapsed (hover/rail) overlay keeps its own offset. */
+:root[data-layout="compact"] .app:not(.collapsed) .sidebar { padding-top: calc(var(--cbar-h) + 6px); }
 .cb-left, .cb-right { display: flex; align-items: center; gap: 4px; flex: none; }
 .cb-left { min-width: 0; }
 .cb-mid { flex: 1 1 auto; min-width: 0; display: flex; justify-content: center; }
@@ -701,7 +764,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
    inside the clip (the chrome only exists where the sidebar column is). */
 .peek-grow { display: none; }
 :root[data-layout="compact"] .app.peek .peek-grow {
-  display: block; position: absolute; top: var(--cbar-h); right: 0; bottom: 0; width: 9px;
+  display: block; position: absolute; top: 6px; right: 0; bottom: 6px; width: 9px;
   z-index: 3; cursor: col-resize;
 }
 :root[data-layout="compact"][data-side="right"] .app.peek .peek-grow { right: auto; left: 0; }
@@ -736,7 +799,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 /* Sidebar popovers (recent files). They must stay inside the sidebar column: the page is
    a native view composited above the chrome, so anything that spills over it is hidden. */
 .side-pop {
-  position: fixed; z-index: 46; width: 236px; padding: 6px; border-radius: 14px;
+  position: fixed; z-index: 46; width: 236px; padding: 6px; border-radius: var(--radius);
   display: flex; flex-direction: column; gap: 2px;
   background: color-mix(in oklab, var(--glass) 78%, transparent); color: var(--glass-ink);
   box-shadow: var(--shadow), 0 0 0 1px var(--glass-line), inset 0 1px 0 rgba(255,255,255,.35);
@@ -751,7 +814,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .media-stack { position: absolute; left: 8px; right: 6px; bottom: 44px; height: 32px; z-index: 14; pointer-events: none; }
 .media-stack .np-card {
   position: absolute; left: 0; right: 0; bottom: 0; height: 32px; pointer-events: auto; cursor: pointer;
-  display: flex; flex-direction: column; gap: 6px; padding: 3px 4px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 6px; padding: 3px 4px; border-radius: var(--radius);
   background: rgba(17, 20, 23, .93); color: #eef2f5; border: 1px solid rgba(255,255,255,.09);
   box-shadow: 0 2px 6px rgba(0,0,0,.18), 0 14px 30px -14px rgba(0,0,0,.55);
   backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
@@ -775,7 +838,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 
 .media-stack.open { height: auto; }
 .media-stack.open .np-card {
-  height: 108px; padding: 7px 7px 5px; border-radius: 13px;
+  height: 108px; padding: 7px 7px 5px; border-radius: var(--radius);
   transform: translateY(calc(var(--d, 0) * -116px)) scaleX(1);
   filter: none; opacity: 1;
 }
@@ -820,7 +883,9 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-os="windows"] { --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; --accent: #0067c0; --mica: #f3f3f3; }
 @supports (color: AccentColor) { :root[data-os="windows"] { --accent: AccentColor; } }
 :root[data-os="windows"][data-mode="dark"] { --mica: #202020; }
-:root[data-os="windows"] body { background: color-mix(in oklab, var(--a) 22%, var(--mica)); }
+/* The shell keeps the space gradient on Windows too: one fade across the sidebar, bar and frame
+   instead of a flat Mica fill. */
+:root[data-os="windows"] body { background: var(--space-grad); }
 :root[data-os="windows"] body::after { opacity: .05; }
 :root[data-os="windows"] .page-card { box-shadow: 0 0 0 1px var(--line); }
 :root[data-os="windows"] :focus-visible { outline-color: var(--accent); }
@@ -866,7 +931,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .nsp-form { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .nsp-hero { flex: none; padding: 14px 4px 10px; text-align: center; }
 .nsp-icon {
-  position: relative; width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
+  position: relative; width: 46px; height: 46px; border-radius: var(--radius); display: grid; place-items: center;
   background: rgba(255,255,255,.42); box-shadow: inset 0 0 0 1px rgba(255,255,255,.5), 0 4px 14px -6px rgba(0,0,0,.35);
   transition: background .14s, transform .14s;
 }
@@ -878,7 +943,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 
 .nsp-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding: 4px 2px; }
 .nsp-field, .nsp-row {
-  display: flex; align-items: center; gap: 8px; min-width: 0; height: 38px; padding: 0 10px; border-radius: 10px;
+  display: flex; align-items: center; gap: 8px; min-width: 0; height: 38px; padding: 0 10px; border-radius: var(--radius);
   background: rgba(255,255,255,.34); box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
 }
 :root[data-ink="light"] .nsp-field, :root[data-ink="light"] .nsp-row {
@@ -895,7 +960,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .nsp-row-v svg { width: 13px; height: 13px; flex: none; }
 .nsp-row .pdot { width: 17px; height: 17px; border-radius: 5px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
 .nsp-row select { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12.5px; appearance: none; }
-.nsp-themes { display: flex; flex-direction: column; gap: 8px; padding: 9px; border-radius: 12px; background: rgba(255,255,255,.26); box-shadow: inset 0 0 0 1px rgba(255,255,255,.34); }
+.nsp-themes { display: flex; flex-direction: column; gap: 8px; padding: 9px; border-radius: var(--radius); background: rgba(255,255,255,.26); box-shadow: inset 0 0 0 1px rgba(255,255,255,.34); }
 .ns-themes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
 .ns-sw { height: 24px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.09); transition: transform .12s, box-shadow .12s; }
 .ns-sw:hover { transform: translateY(-1px); }
@@ -905,7 +970,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .ns-custom input[type="color"] { width: 26px; height: 22px; border: 0; padding: 0; background: none; border-radius: 6px; }
 .ns-icon-pop {
   display: none; position: absolute; z-index: 5; left: 50%; translate: -50% 0; top: 100%; margin-top: 8px;
-  padding: 6px; border-radius: 12px; grid-template-columns: repeat(6, 1fr); gap: 2px; width: 210px;
+  padding: 6px; border-radius: var(--radius); grid-template-columns: repeat(6, 1fr); gap: 2px; width: 210px;
   background: var(--menu); color: var(--glass-ink); box-shadow: var(--shadow), 0 0 0 1px var(--glass-line);
 }
 .ns-icon-pop.open { display: grid; }
@@ -922,7 +987,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .nsp-rows i .fav { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .nsp-rows i span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nsp-foot { flex: none; display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
-.nsp-foot .btn { height: 36px; border-radius: 10px; }
+.nsp-foot .btn { height: 36px; border-radius: var(--radius); }
 .nsp-foot .btn.primary:disabled { opacity: .4; }
 .btn.ghost { background: transparent; color: var(--ink-2); }
 .btn.ghost:hover { background: rgba(255,255,255,.34); }
@@ -1024,6 +1089,18 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-os="windows"][data-layout="sidebar"] .sidebar { padding-top: 2px; }
 :root[data-os="windows"][data-layout="rail"] .topbar .win-controls { display: flex; }
 :root[data-os="windows"][data-layout="sidebar"] .topbar .win-controls, :root[data-os="windows"][data-layout="rail"] .topbar .win-controls { margin: 0; align-self: stretch; }
+
+/* The top bar is across the whole window in every Windows layout, so the sidebar starts under it
+   in every layout too. The toolbar layout used to span the sidebar over the bar, which let the
+   Essentials rise into the top-left corner where the navigation and window buttons live. */
+:root[data-os="windows"][data-layout="toolbar"] .app { grid-template-rows: 38px 1fr; }
+:root[data-os="windows"][data-layout="toolbar"] .topbar { padding-left: 8px; }
+:root[data-os="windows"][data-layout="toolbar"] .sidebar,
+:root[data-os="windows"][data-layout="toolbar"] .sidebar-resizer,
+:root[data-os="windows"][data-layout="toolbar"] .page-card { grid-row: 2; }
+:root[data-os="windows"][data-layout="toolbar"] .page-card { margin-top: 0; }
+:root[data-os="windows"][data-layout="toolbar"] .side-top { display: none; }
+:root[data-os="windows"][data-layout="toolbar"] .sidebar { padding-top: 2px; }
 
 /* Toolbar slot: pinned extensions, then the window buttons */
 .tb-right { display: flex; align-items: center; justify-content: flex-end; align-self: stretch; gap: 4px; justify-self: end; }
@@ -1132,12 +1209,12 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .split-row .vsep { width: 1px; height: 56%; background: var(--line); flex: none; margin: 0 2px; }
 .split-row .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The compact bar: the Wave menu and navigation at the left, then the address; on the right only
+/* The compact bar: the Rainbow menu and navigation at the left, then the address; on the right only
    New Tab, the pinned extensions and the window buttons. */
 .cb-left { gap: 2px; }
 @container (max-width: 210px) { .cbar .cb-right > #cbNewTab { display: none; } }
 
-/* Ask Wave fades out as softly as it comes in; so does the Canvas wash. */
+/* Ask Rainbow fades out as softly as it comes in; so does the Canvas wash. */
 .ask.out { animation: ask-out .3s var(--ease) forwards; pointer-events: none; }
 @keyframes ask-out { to { opacity: 0; transform: translateX(-50%) translateY(10px); } }
 .veil.low { animation: veil-in .45s var(--ease); }
@@ -1184,7 +1261,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .cmdbar li .k { font-size: 10.5px; }
 .cmd-foot { padding: 7px 16px 8px; font-size: 11px; }
 
-/* Ask Wave's wash: sharp page below, blurred page above it fading in towards the bottom, never a second
+/* Ask Rainbow's wash: sharp page below, blurred page above it fading in towards the bottom, never a second
    section of the window. */
 .veil.low { left: 0; right: 0; bottom: auto; background: none; overflow: hidden; -webkit-mask-image: none; mask-image: none; animation: none; }
 .veil.low::after { display: none; }
@@ -1201,18 +1278,11 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .veil:not(.low) .wash { display: none; }
 .veil.low .wash img.sharp { filter: none; }
 
-/* The welcome: water that clears into the app. */
-.onboard { position: fixed; inset: 0; z-index: 95; background: #0e1a22; display: grid; place-items: center; }
-.onboard canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.ob-word { position: relative; font: 600 clamp(48px, 9vw, 104px)/1 var(--serif, Georgia, serif); color: #eaf5f8; opacity: 0; text-shadow: 0 6px 40px rgba(0,0,0,.35); }
-
 /* On-device models */
 .model-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in oklab, var(--glass-ink) 6%, transparent); }
 .model-row .mr-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .model-row .mr-bar { height: 4px; border-radius: 2px; background: color-mix(in oklab, var(--glass-ink) 14%, transparent); overflow: hidden; margin-top: 4px; }
 .model-row .mr-bar i { display: block; height: 100%; background: var(--accent, var(--glass-ink)); }
-.onboard canvas.pixel { image-rendering: pixelated; image-rendering: crisp-edges; }
-
 /* Windows caption buttons, as Windows draws them: thin glyphs on nothing, flush with the corner. A light grey
    under the pointer; Close turns solid red with a white glyph. */
 :root[data-os="windows"] .win-controls { gap: 0; padding: 0; }
@@ -1222,3 +1292,73 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-os="windows"] .win-controls .wc[data-win="close"]:hover, :root[data-os="windows"] .win-controls:hover .wc[data-win="close"]:hover {
   background: #c42b1c; color: #fff; border-top-right-radius: 8px;
 }
+
+/* ---------- docked Ask composer ---------- */
+/* A resting notch in the page frame that grows into the chat. It is drawn by the chrome over a
+   band clipped out of the live page, so it can sit on the page without moving it. */
+.composer {
+  position: absolute; left: 50%; bottom: 0; translate: -50% 0; z-index: 12;
+  display: flex; align-items: center; gap: 8px;
+  width: min(760px, calc(100% - 32px)); height: 52px; padding: 6px 8px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: color-mix(in oklab, #0c1014 78%, transparent); color: #f2f6f8;
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 10px 30px -14px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(24px) saturate(1.25); -webkit-backdrop-filter: blur(24px) saturate(1.25);
+}
+.composer[hidden] { display: none; }
+.cp-tools, .cp-right { display: flex; align-items: center; gap: 2px; flex: none; }
+.cp-tool {
+  width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center;
+  color: rgba(255,255,255,.72); flex: none; transition: background .12s, color .12s;
+}
+.cp-tool:hover { background: rgba(255,255,255,.1); color: #fff; }
+.cp-tool svg { width: 16px; height: 16px; stroke-width: 1.4; }
+.composer input {
+  flex: 1 1 0; min-width: 0; border: 0; outline: 0; background: transparent;
+  color: #f2f6f8; font-size: 14px; padding: 0 4px;
+}
+.composer input::placeholder { color: rgba(255,255,255,.5); }
+.cp-model {
+  max-width: 180px; padding: 4px 10px; border-radius: 999px; font-size: 11px;
+  color: rgba(255,255,255,.78); background: rgba(255,255,255,.1); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.cp-model:hover { background: rgba(255,255,255,.16); }
+.cp-send {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: #f3f6f7; color: #111; flex: none;
+}
+.cp-send svg { width: 16px; height: 16px; stroke-width: 1.8; }
+.cp-send:disabled { opacity: .4; }
+@media (max-width: 560px) {
+  .cp-tools .cp-tool:not(#cpAgent), .cp-model { display: none; }
+}
+
+/* ---------- the notch, as drawn: glass cut into the page's bottom edge ---------- */
+/* The notch is the frame's own gradient with a soft highlight, rising into the page. Its top corners are
+   round; at its base two small pieces of frame curve the page's corners away from it, so the page reads as
+   one sheet with a bite taken out of the bottom edge. */
+.composer {
+  --notch-r: 22px;
+  width: min(780px, calc(100% - 140px)); height: 58px; padding: 0 18px 0 12px; gap: 6px;
+  border: 0; border-radius: var(--notch-r) var(--notch-r) 0 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  color: var(--ink);
+  background: linear-gradient(to bottom, rgba(255,255,255,.2), rgba(255,255,255,0) 92%), var(--space-grad);
+  background-attachment: scroll, fixed;
+}
+.composer::before, .composer::after {
+  content: ""; position: absolute; bottom: 0; width: var(--notch-r); height: var(--notch-r); pointer-events: none;
+  background: var(--space-grad); background-attachment: fixed;
+}
+.composer::before { left: calc(-1 * var(--notch-r)); -webkit-mask: radial-gradient(circle at 0 0, transparent calc(var(--notch-r) - .5px), #000 var(--notch-r)); mask: radial-gradient(circle at 0 0, transparent calc(var(--notch-r) - .5px), #000 var(--notch-r)); }
+.composer::after { right: calc(-1 * var(--notch-r)); -webkit-mask: radial-gradient(circle at 100% 0, transparent calc(var(--notch-r) - .5px), #000 var(--notch-r)); mask: radial-gradient(circle at 100% 0, transparent calc(var(--notch-r) - .5px), #000 var(--notch-r)); }
+.cp-tool { width: 36px; height: 36px; border-radius: 11px; color: var(--ink-2); }
+.cp-tool:hover { background: color-mix(in oklab, var(--ink) 9%, transparent); color: var(--ink); }
+.cp-tool.on { background: color-mix(in oklab, var(--ink) 11%, transparent); color: var(--ink); }
+.cp-tool svg { width: 18px; height: 18px; stroke-width: 1.25; }
+.cp-sep { width: 1px; height: 22px; margin: 0 6px; background: color-mix(in oklab, var(--ink) 16%, transparent); flex: none; }
+.composer input { color: var(--ink); font-size: 14.5px; padding: 0 6px; }
+.composer input::placeholder { color: var(--ink-3); }
+.cp-send { background: var(--ink); color: var(--a); }
+.cp-send[hidden], .cp-tool[hidden] { display: none; }

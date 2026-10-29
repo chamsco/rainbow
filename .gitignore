@@ -12,6 +12,6 @@ release/
 *.bak
 __pycache__/
 *.pyc
-rust-port/crates/wave/ui/.qa.*
+rust-port/crates/rainbow/ui/.qa.*
 .claude/
 .workbuddy-ai/

@@ -1,6 +1,6 @@
-//! Embeds `ui/` into the executable. A shipped Wave cannot read its chrome from the
+//! Embeds `ui/` into the executable. A shipped Rainbow cannot read its chrome from the
 //! source tree, and an updater must be able to replace one file. Debug builds still read
-//! `ui/` from disk when WAVE_UI_DIR is set, so the chrome can be edited without a rebuild.
+//! `ui/` from disk when RAINBOW_UI_DIR is set, so the chrome can be edited without a rebuild.
 
 use std::{env, fs, path::Path};
 

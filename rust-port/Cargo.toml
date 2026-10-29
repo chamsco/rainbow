@@ -1,8 +1,17 @@
 [workspace]
 resolver = "2"
-members = ["crates/wave"]
+members = ["crates/rainbow"]
 
 [workspace.package]
 edition = "2021"
 version = "0.1.0"
 license = "MIT"
+
+# A small shipped binary: no debug symbols, one codegen unit and LTO. The web engine is the
+# system WebView2 runtime, so none of Chromium is bundled here.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -9,20 +9,20 @@
    the Decider, with just those candidates. Neither is installed by default. Installing downloads the model once
    from its public host into this browser's cache; after that every decision is made locally.
 
-   `Wave.localModel.classify(card)` is the one call the Canvas makes. It answers null when nothing is installed,
+   `Rainbow.localModel.classify(card)` is the one call the Canvas makes. It answers null when nothing is installed,
    and the Canvas falls back to its keyword scorer. */
 (() => {
-  const { h } = Wave;
+  const { h } = Rainbow;
   const RUNTIME = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/+esm';
   const MODELS = {
     sorter: { id: 'sorter', name: 'Sorter', role: 'Files Canvas cards under the right topic', repo: 'Xenova/all-MiniLM-L6-v2', task: 'feature-extraction', size: '~23 MB', opts: { dtype: 'q8' } },
     decider: { id: 'decider', name: 'Decider', role: 'Makes one small decision at a time, for sorting and for the assistant', repo: 'onnx-community/Qwen2.5-0.5B-Instruct', task: 'text-generation', size: '~400 MB', opts: { dtype: 'q4' } },
   };
-  const st = Wave.state.models ||= { mode: 'both', installed: {} };
+  const st = Rainbow.state.models ||= { mode: 'both', installed: {} };
   const pipes = {}, status = {};   // loaded pipelines; 'idle' | 'loading' | 'ready' | 'error'
   let lib = null;
 
-  const emit = () => Wave.onModels?.();
+  const emit = () => Rainbow.onModels?.();
   const runtime = async () => {
     if (!lib) {
       lib = await import(RUNTIME);
@@ -41,14 +41,14 @@
       const device = id === 'decider' && navigator.gpu ? 'webgpu' : 'wasm';
       pipes[id] = await pipeline(m.task, m.repo, { ...m.opts, device,
         progress_callback: p => { if (p.status === 'progress' && p.total) { m.progress = Math.round(p.loaded / p.total * 100); emit(); } } });
-      st.installed[id] = true; status[id] = 'ready'; Wave.save();
+      st.installed[id] = true; status[id] = 'ready'; Rainbow.save();
     } catch (e) {
       status[id] = 'error'; m.error = String(e.message || e);
     }
     emit();
   }
   async function remove(id) {
-    delete pipes[id]; status[id] = 'idle'; st.installed[id] = false; Wave.save();
+    delete pipes[id]; status[id] = 'idle'; st.installed[id] = false; Rainbow.save();
     try { for (const name of await caches.keys()) { const c = await caches.open(name); for (const r of await c.keys()) if (r.url.includes(MODELS[id].repo)) await c.delete(r); } } catch {}
     emit();
   }
@@ -104,7 +104,7 @@ Reply:` },
 
   /* ---- what the Canvas calls ---- */
   async function classify(card) {
-    const topics = Wave.canvas?.topicWords?.();
+    const topics = Rainbow.canvas?.topicWords?.();
     if (!topics || st.mode === 'off') return null;
     const names = Object.keys(topics), q = `${card.title || ''}. ${String(card.text || '').slice(0, 300)} (${card.url || ''})`;
     if (on('sorter')) {
@@ -118,10 +118,10 @@ Reply:` },
     return null;
   }
 
-  Wave.localModel = { classify, decide, install, remove, MODELS, status: id => status[id] || (st.installed[id] ? 'installed' : 'idle') };
-  Wave.modelsPage = () => {
+  Rainbow.localModel = { classify, decide, install, remove, MODELS, status: id => status[id] || (st.installed[id] ? 'installed' : 'idle') };
+  Rainbow.modelsPage = () => {
     const row = m => {
-      const s = Wave.localModel.status(m.id);
+      const s = Rainbow.localModel.status(m.id);
       const label = s === 'loading' ? `Downloading ${m.progress || 0}%` : s === 'ready' || s === 'installed' ? 'Ready' : s === 'error' ? 'Could not download' : 'Not installed';
       return h('div', { class: 'model-row' },
         h('div', { class: 'mr-t' }, h('strong', {}, `${m.name} · ${m.size}`), h('span', { class: 'hint' }, m.role),
@@ -134,5 +134,5 @@ Reply:` },
     };
     return [Object.values(MODELS).map(row), st.mode];
   };
-  Wave.setModelMode = mode => { st.mode = mode; Wave.save(); emit(); };
+  Rainbow.setModelMode = mode => { st.mode = mode; Rainbow.save(); emit(); };
 })();

@@ -1,14 +1,14 @@
-# Wave: roadmap
+# Rainbow: roadmap
 
-Where Wave goes next, and what it can learn from [Zephium](https://github.com/zephium-browser/Zephium), an open-source
+Where Rainbow goes next, and what it can learn from [Zephium](https://github.com/zephium-browser/Zephium), an open-source
 browser built the same way (Rust shell, the system's own web engine, an HTML interface, WebView2 on Windows and WebKit on
-macOS). Wave's finished and open work is in [tasks.md](tasks.md); this file is the plan.
+macOS). Rainbow's finished and open work is in [tasks.md](tasks.md); this file is the plan.
 
 ## Licence first
 
 Zephium is **MPL-2.0**: a file-level licence. Using its ideas, behaviour and structure is free. Copying a file, or a
 substantial part of one, keeps that file under MPL-2.0 (the notice stays, and changes to it are published), even inside an
-MIT project. So the rule for Wave is: **take ideas and designs, write our own code**; only if we deliberately adopt a
+MIT project. So the rule for Rainbow is: **take ideas and designs, write our own code**; only if we deliberately adopt a
 whole module do we keep it in its own MPL-marked file. Things Zephium itself builds on:
 
 - `adblock-rust` (Brave, MPL-2.0) is a library; using it as a dependency is fine.
@@ -18,7 +18,7 @@ whole module do we keep it in its own MPL-marked file. Things Zephium itself bui
 
 ### 1. The assistant docked in the page (high)
 Zephium puts the assistant's composer at the bottom of the page, cut into the page frame like a notch: a few tool icons,
-"What do you want to do?", a mic. Ask Wave today is a floating window with a wash behind it.
+"What do you want to do?", a mic. Ask Rainbow today is a floating window with a wash behind it.
 - Dock a composer into the bottom edge of the page frame; it grows into the chat on use.
 - **The page's corner radius equals the app frame's.** On Windows 11 the frame is 8 px; the page, the composer notch and
   the split panes follow one radius token (today Corner radius is a setting, default 10).
@@ -36,16 +36,16 @@ A real Tasks panel, which Routines and the assistant can write into:
 Zephium's agent flows live on a canvas, not in a chat scroll: a prompt node with "Your memory" and a skill attached,
 questions asked inline, helper branches that each browse a live page you can watch (Working / Done), result cards (photos,
 price, flight timelines), a plan card, and finally tasks.
-- Wave's Canvas already holds cards; add **run nodes**: prompt, memory, helper, result, plan.
+- Rainbow's Canvas already holds cards; add **run nodes**: prompt, memory, helper, result, plan.
 - Helpers use a real tab in the background and show a live preview card.
 - Everything with an effect (post, buy, change) waits for an explicit OK; reading and placing cards does not.
 - **Skills** (small written procedures: trip planning, compare and choose, plan my day, weekly status) and **memory**
-  (what Wave knows about you, local, editable).
+  (what Rainbow knows about you, local, editable).
 - Choose a model per step: built-in commands, your own key (Anthropic, OpenAI, Google, Mistral, Groq, OpenRouter and
   others), a local server (Ollama, LM Studio), or the on-device Decider. Keys go in the system keychain, not in settings.
 
 ### 4. A native ad and tracker blocker (high)
-How Zephium does it, and how Wave would:
+How Zephium does it, and how Rainbow would:
 - **Engine:** Brave's `adblock-rust` compiles EasyList and EasyPrivacy into an immutable matcher. Requests are stopped
   *before* the page can make them. On Windows that is WebView2's resource-request hook for every page view.
 - **Lists:** a bundled copy ships in the app (attribution, CC BY-SA); an updater refreshes them about every 24–30 hours with
@@ -54,7 +54,7 @@ How Zephium does it, and how Wave would:
   (a personal element picker, stored per site).
 - **Controls:** on by default per profile, pause for one site, a counter of what was blocked, Settings → Privacy.
 - **Out of scope on purpose:** scriptlets, response rewriting, a proxy or certificate. Say plainly what is not covered.
-- Wave already has per-site Boosts, which can host the picker's saved rules.
+- Rainbow already has per-site Boosts, which can host the picker's saved rules.
 
 ### 5. Routines, planned (high). See "Routines and tasks" below.
 
@@ -86,7 +86,7 @@ They are different things and should stay different.
 
 |  | Task | Routine |
 | --- | --- | --- |
-| What it is | Something *you* will do | Something *Wave* does for you, again and again |
+| What it is | Something *you* will do | Something *Rainbow* does for you, again and again |
 | Has | A day, maybe a time, a link to a page | A prompt, a trigger, a grant, a log |
 | Ends when | You check it off | It never ends; each run does |
 | Lives in | Tasks panel | Library → Routines |
@@ -104,7 +104,7 @@ They are different things and should stay different.
 6. **Quiet by default:** a run finishes silently unless it needs you; one summary card per day at most.
 7. **Off the page's reach:** a page can never create or change a routine; only the interface can.
 
-Today's Routines (a prompt that runs at start or daily while Wave is open) are step 1 of this. The next steps are the run
+Today's Routines (a prompt that runs at start or daily while Rainbow is open) are step 1 of this. The next steps are the run
 log, the grant and the notice for anything that needs approval.
 
 ## Suggested order

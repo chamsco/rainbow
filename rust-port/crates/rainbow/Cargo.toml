@@ -1,0 +1,22 @@
+[package]
+name = "rainbow"
+version = "0.1.0"
+edition = "2021"
+description = "Rainbow: the browser shell. The HTML interface (ui/) runs in one webview and each tab's page in its own child webview."
+license = "MIT"
+
+[features]
+# A build that keeps its console window and logs every message: for watching, not for shipping.
+# Release without this feature is a GUI binary with no console (`windows_subsystem = "windows"`).
+nightly = []
+
+[dependencies]
+wry = { version = "0.57", features = ["devtools"] }
+winit = "0.30"
+serde_json = "1"
+base64 = "0.22"
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_WinRT", "Foundation", "Graphics_Imaging", "Storage_Streams", "Media_Ocr"] }
+windows-future = "0.3.2"
