@@ -45,6 +45,106 @@
     !$('#panel').hidden || !$('#cmdbar').hidden || !$('#menu').hidden || !$('#menuSub').hidden ||
     !$('#shotTool').hidden || !$('#newSpace').hidden;
 
+  // The tools' popovers (Add to Canvas, Tasks, Add tabs) open above the notch. Like the notch they are chrome drawn
+  // over the native page, so their rectangle joins the region while they are open.
+  const { h } = Rainbow;
+  const pop = Object.assign(document.createElement('div'), { id: 'cpPop', hidden: true });
+  document.body.append(pop);
+  let popKind = '', taskDay = 'today', picked = new Set(), tabFilter = '';
+  const PR = 16;
+  const ico = d => `<svg viewBox="0 0 16 16">${d}</svg>`;
+  const ICON = {
+    note: ico('<rect x="3" y="3" width="10" height="10" rx="2"/><path d="M9.5 13v-2.5a1 1 0 0 1 1-1H13"/>'),
+    page: ico('<rect x="2.5" y="3" width="11" height="10" rx="2"/><path d="M2.5 6h11"/>'),
+    canvas: ico('<rect x="2.4" y="2.4" width="4.4" height="4.4" rx="1"/><circle cx="11.2" cy="4.6" r="2.2"/><path d="M4.6 9.2 6.9 13H2.3z"/>'),
+    routine: ico('<path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5M8 5.5V8l1.8 1.2"/>'),
+    check: ico('<path d="M3.5 8.5 6.5 11.5 12.5 4.5"/>'),
+    x: ico('<path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/>'),
+    plus: ico('<path d="M8 3v10M3 8h10"/>'),
+    tasks: ico('<path d="M2.4 3.8l1.1 1.1 1.9-2M2.4 9l1.1 1.1 1.9-2M7.6 4.2h6M7.6 9.4h6M7.6 13h3.4"/>'),
+  };
+  const row = (icon, title, sub, fn) => h('button', { type: 'button', class: 'pp-row', onclick: fn },
+    h('span', { class: 'pp-ico', innerHTML: icon }), h('span', { class: 'pp-text' }, h('b', {}, title), h('i', {}, sub)));
+  const done = () => { closePop(); hide(); };
+  function viewCanvasMenu() {
+    return [
+      row(ICON.note, 'Note', 'Words, links and lists', () => { done(); Rainbow.canvas?.addNote('New note'); Rainbow.setView('canvas'); }),
+      row(ICON.page, 'This page', 'Save the open tab to the Canvas', () => { const t = Rainbow.activeTab(); done(); if (t) Rainbow.canvas?.saveTab(t.id); }),
+      row(ICON.canvas, 'Canvas', 'Everything you have saved', () => { done(); Rainbow.setView('canvas'); }),
+      row(ICON.routine, 'Routines', 'Prompts that run on their own', () => { done(); Rainbow.library?.open('routines'); }),
+    ];
+  }
+  function viewTasks() {
+    const st = Rainbow.state; st.tasks ||= [];
+    const days = [['today', 'Today'], ['inbox', 'Inbox'], ['later', 'Upcoming']];
+    const list = st.tasks.filter(t => t.day === taskDay);
+    const add = h('input', { class: 'pp-add', placeholder: 'Add a task…', 'aria-label': 'Add a task',
+      onkeydown: e => {
+        if (e.key !== 'Enter' || !add.value.trim()) return;
+        st.tasks.push({ id: Rainbow.uid(), text: add.value.trim().slice(0, 200), day: taskDay, done: false });
+        Rainbow.save(); build(); pop.querySelector('.pp-add')?.focus();
+      } });
+    return [
+      h('div', { class: 'pp-tabs' }, ...days.map(([id, name]) => h('button', { type: 'button', class: id === taskDay ? 'on' : '', onclick: () => { taskDay = id; build(); } },
+        name + (st.tasks.some(t => t.day === id && !t.done) ? ` ${st.tasks.filter(t => t.day === id && !t.done).length}` : '')))),
+      h('div', { class: 'pp-addrow' }, h('span', { class: 'pp-plus', innerHTML: ICON.plus }), add),
+      list.length
+        ? h('ul', { class: 'pp-tasks' }, ...list.map(t => h('li', { class: t.done ? 'done' : '' },
+            h('button', { type: 'button', class: 'pp-check', 'aria-label': t.done ? 'Mark as to do' : 'Mark as done', innerHTML: t.done ? ICON.check : '', onclick: () => { t.done = !t.done; Rainbow.save(); build(); } }),
+            h('span', {}, t.text),
+            h('button', { type: 'button', class: 'pp-del', 'aria-label': 'Delete task', innerHTML: ICON.x, onclick: () => { st.tasks = st.tasks.filter(x => x !== t); Rainbow.save(); build(); } }))))
+        : h('div', { class: 'pp-empty' }, h('span', { class: 'pp-ico big', innerHTML: ICON.tasks }), h('b', {}, 'Nothing to do'), h('i', {}, 'Add a task when something needs your attention.')),
+    ];
+  }
+  function viewTabs() {
+    const s = Rainbow.space(), q = tabFilter.toLowerCase();
+    const tabs = [...s.pinned, ...s.today].map(id => Rainbow.tab(id)).filter(t => t && (!q || `${t.title} ${t.url}`.toLowerCase().includes(q)));
+    const search = h('input', { class: 'pp-search', placeholder: 'Search tabs', value: tabFilter, 'aria-label': 'Search tabs',
+      oninput: e => { tabFilter = e.target.value; const at = e.target.selectionStart; build(); const el = pop.querySelector('.pp-search'); el?.focus(); el?.setSelectionRange(at, at); } });
+    return [
+      h('div', { class: 'pp-label' }, `${s.icon} ${s.name}`),
+      search,
+      h('div', { class: 'pp-list' }, ...tabs.map(t => h('button', { type: 'button', class: 'pp-tab', onclick: () => { picked.has(t.id) ? picked.delete(t.id) : picked.add(t.id); build(); } },
+        h('span', { class: 'pp-check' + (picked.has(t.id) ? ' on' : ''), innerHTML: picked.has(t.id) ? ICON.check : '' }),
+        Rainbow.favicon(t.url, 16),
+        h('span', { class: 'pp-text' }, h('b', {}, t.custom || t.title || Rainbow.hostOf(t.url)), h('i', {}, Rainbow.hostOf(t.url)))))),
+      h('div', { class: 'pp-foot' },
+        h('button', { type: 'button', class: 'btn primary', disabled: !picked.size, onclick: () => { const ids = [...picked]; done(); ids.forEach(id => Rainbow.canvas?.saveTab(id)); } }, `Add to Canvas${picked.size ? ` (${picked.size})` : ''}`)),
+    ];
+  }
+  function build() {
+    pop.replaceChildren(...({ canvas: viewCanvasMenu, tasks: viewTasks, tabs: viewTabs }[popKind]?.() || []));
+    pop.dataset.kind = popKind;
+    placePop();
+  }
+  function placePop() {
+    if (!geo) return;
+    const w = Math.min(380, innerWidth - 24);
+    pop.style.width = w + 'px';
+    pop.style.left = Math.max(12, Math.min(geo.left + 12, innerWidth - w - 12)) + 'px';
+    pop.style.bottom = innerHeight - geo.top + 10 + 'px';
+    pop.style.maxHeight = Math.max(160, geo.top - 40) + 'px';
+    apply();
+  }
+  const TOOLS = { canvas: '#cpCanvas', tasks: '#cpSettings', tabs: '#cpNew' };
+  function openPop(kind) {
+    if (popKind === kind) return closePop();
+    popKind = kind; picked = new Set(); tabFilter = '';
+    pop.hidden = false;
+    build();
+    for (const [k, sel] of Object.entries(TOOLS)) $(sel).classList.toggle('on', k === kind);
+    $('#cpAgent').classList.remove('on');
+    setTimeout(() => pop.querySelector('.pp-add, .pp-search')?.focus(), 60);
+  }
+  function closePop() {
+    if (!popKind) return;
+    popKind = ''; pop.hidden = true; pop.replaceChildren();
+    for (const sel of Object.values(TOOLS)) $(sel).classList.remove('on');
+    $('#cpAgent').classList.add('on');
+    if (geo) apply();
+  }
+  new ResizeObserver(() => { if (popKind) placePop(); }).observe(pop);
+
   // Where the notch rests: centred under the page, its feet on the window's bottom edge.
   function measure() {
     const card = $('#pageCard').getBoundingClientRect();
@@ -79,6 +179,14 @@
       p > .85 ? strip(left - f, bottom - f, f, f, [R(left - f), R(bottom - f), f]) : null,
       p > .85 ? strip(left + w, bottom - f, f, f, [R(left + w + f), R(bottom - f), f]) : null,
     ].filter(Boolean);
+    if (popKind && p > .85) {
+      const r = pop.getBoundingClientRect(), q = PR;
+      if (r.width > 2 * q && r.height > 2 * q) {
+        const raw = (x, y, bw, bh) => ({ x: R(x), y: R(y), w: R(bw), h: R(bh) }), dc = (cx, cy) => ({ y: R(cy), h: 1, disc: [R(cx), R(cy), q] });
+        list.push(raw(r.left + q, r.top, r.width - 2 * q, r.height), raw(r.left, r.top + q, r.width, r.height - 2 * q),
+          dc(r.left + q, r.top + q), dc(r.right - q, r.top + q), dc(r.left + q, r.bottom - q), dc(r.right - q, r.bottom - q));
+      }
+    }
     return list.length ? { t: 'chrome', band: list } : null;
   }
   // Rise and fall are one thing: how much of the notch is let out (0..1). The region wipes from the bottom edge up and the
@@ -116,6 +224,7 @@
   function hide() {
     if (!armed) return;
     armed = false; hot.style.pointerEvents = '';
+    closePop();
     rimReady = false; rim.hidden = true;
     go(0);
   }
@@ -132,7 +241,8 @@
   hot.addEventListener('click', show);
   form.addEventListener('click', () => { if (!armed) show(); });
   // Anywhere outside the notch puts it away (a click on the page is a focus change; see below).
-  document.addEventListener('pointerdown', e => { if (armed && !form.contains(e.target)) hide(); });
+  document.addEventListener('pointerdown', e => { if (armed && !form.contains(e.target) && !pop.contains(e.target)) hide(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && popKind) { e.stopPropagation(); closePop(); } }, true);
   const syncHot = () => { hot.hidden = armed ? true : blocked(); if (!armed && !blocked() && p === 0) measure(); };
   setInterval(syncHot, 300);
 
@@ -145,8 +255,12 @@
   new ResizeObserver(relayout).observe($('#pageCard'));
   // Leaving the field (a click into the page, another window) puts it away; moving between its own buttons does not.
   form.addEventListener('focusout', e => {
-    if (form.contains(e.relatedTarget)) return;
-    setTimeout(() => { if (armed && !form.contains(document.activeElement) && !isAsk()) hide(); }, 140);
+    if (form.contains(e.relatedTarget) || pop.contains(e.relatedTarget)) return;
+    setTimeout(() => { if (armed && !form.contains(document.activeElement) && !pop.contains(document.activeElement) && !isAsk()) hide(); }, 140);
+  });
+  pop.addEventListener('focusout', e => {
+    if (form.contains(e.relatedTarget) || pop.contains(e.relatedTarget)) return;
+    setTimeout(() => { if (armed && !form.contains(document.activeElement) && !pop.contains(document.activeElement) && !isAsk()) hide(); }, 140);
   });
 
   const showModel = () => {
@@ -169,9 +283,9 @@
     send_(text);
   };
   $('#cpAgent').onclick = () => send_(input.value.trim());
-  $('#cpCanvas').onclick = () => { hide(); Rainbow.setView('canvas'); };
-  $('#cpSettings').onclick = () => { hide(); Rainbow.openSettings('look'); };
-  $('#cpNew').onclick = () => { hide(); Rainbow.openCmd('new'); };
+  $('#cpCanvas').onclick = () => openPop('canvas');
+  $('#cpSettings').onclick = () => openPop('tasks');
+  $('#cpNew').onclick = () => openPop('tabs');
   // Dictation has to write into this input, not the hidden Ask input, so it has its own small
   // speech path; on Windows the shell opens the system dictation over the focused field.
   let rec = null;

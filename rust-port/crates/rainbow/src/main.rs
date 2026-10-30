@@ -1512,6 +1512,9 @@ impl App {
                 }
             }
             "dictate" => dictate(),
+            // General settings that live outside the page: the system's default-apps screen, and starting at sign-in.
+            "default_apps" => open_default_apps(),
+            "autostart" => set_autostart(m["on"].as_bool().unwrap_or(false)),
             // The sidebar floats over the page: a page is a child window *above* the chrome,
             // so the chrome is clipped to the sidebar column and raised while it is showing.
             "chrome" => {
@@ -2192,6 +2195,32 @@ fn dictate() {
 }
 #[cfg(not(windows))]
 fn dictate() {}
+
+/// Windows decides the default browser itself; the best an app can do is open that screen.
+#[cfg(windows)]
+fn open_default_apps() {
+    let _ = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn();
+}
+#[cfg(not(windows))]
+fn open_default_apps() {}
+
+/// Start Rainbow when the user signs in (the per-user Run key; no admin rights, easy to see and remove).
+#[cfg(windows)]
+fn set_autostart(on: bool) {
+    use std::os::windows::process::CommandExt;
+    const NO_WINDOW: u32 = 0x0800_0000;
+    const KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+    let mut cmd = std::process::Command::new("reg");
+    if on {
+        let Ok(exe) = std::env::current_exe() else { return };
+        cmd.args(["add", KEY, "/v", "Rainbow", "/t", "REG_SZ", "/d"]).arg(format!("\"{}\"", exe.display())).arg("/f");
+    } else {
+        cmd.args(["delete", KEY, "/v", "Rainbow", "/f"]);
+    }
+    let _ = cmd.creation_flags(NO_WINDOW).spawn();
+}
+#[cfg(not(windows))]
+fn set_autostart(_: bool) {}
 
 /// Watch the app-wide foreground window. A native child cannot report clicks, and the PiP
 /// window belongs to Chromium's process, so a cheap poll is the only cross-process way to

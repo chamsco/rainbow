@@ -140,7 +140,9 @@ if (root.dataset.os === 'windows' && state.settings.migratedCompact !== true) {
 /* runtime, not persisted */
 const live = new Set();       // tab ids with a webview
 const loading = new Set();
-const closed = [];            // for Ctrl+Shift+T
+const closed = [];            // for Ctrl+Shift+T: groups of tabs, newest last
+const selected = new Set();   // tab ids picked with Ctrl/Shift+click
+let selAnchor = 0;
 let shownTab = null;          // what the page card shows right now
 let view = 'page';            // 'page' | 'canvas'
 
@@ -619,23 +621,30 @@ function lists(t) {
   return s ? [s.pinned, s.today] : [];
 }
 
-function closeTab(id) {
-  const t = tab(id);
-  if (!t) return;
-  const s = state.spaces.find(x => x.id === t.space);
-  const wasActive = s?.active === id;
-  if (live.has(id)) { send({ t: 'close', id }); live.delete(id); frames[id]?.remove(); }
-  media.delete(id);
-  if (s?.split?.includes(id)) s.split = null;
-  if (t.home || t.ess) { // pinned and Essential tabs unload; they stay in the sidebar
-    t.url = t.home || t.url; t.title = t.title || hostOf(t.url);
-  } else {
-    if (s) s.today = s.today.filter(x => x !== id);
-    closed.push({ ...t });
-    state.archive = [{ url: t.url, title: t.title, t: Date.now() }, ...state.archive].slice(0, 300);
-    delete state.tabs[id];
+function closeTab(id) { closeTabs([id]); }
+/* Closing several at once is one step to undo: the group goes on the closed stack together. */
+function closeTabs(ids) {
+  const batch = [], touched = new Set();
+  for (const id of ids) {
+    const t = tab(id);
+    if (!t) continue;
+    const s = state.spaces.find(x => x.id === t.space);
+    if (s?.active === id) touched.add(s);
+    if (live.has(id)) { send({ t: 'close', id }); live.delete(id); frames[id]?.remove(); }
+    media.delete(id);
+    if (s?.split?.includes(id)) s.split = null;
+    if (t.home || t.ess) { // pinned and Essential tabs unload; they stay in the sidebar
+      t.url = t.home || t.url; t.title = t.title || hostOf(t.url);
+    } else {
+      if (s) s.today = s.today.filter(x => x !== id);
+      batch.push({ ...t });
+      state.archive = [{ url: t.url, title: t.title, t: Date.now() }, ...state.archive].slice(0, 300);
+      delete state.tabs[id];
+    }
   }
-  if (wasActive && s) {
+  if (batch.length) closed.push(batch);
+  selected.clear();
+  for (const s of touched) {
     const order = [...s.pinned, ...s.today].filter(x => live.has(x));
     s.active = s.today.find(x => live.has(x)) ?? order[0] ?? null;
     if (s.id === state.activeSpace) { if (s.active) activate(s.active); else showPage(null); }
@@ -643,9 +652,18 @@ function closeTab(id) {
   render(); save();
 }
 
+/* The Home command: the home page from General settings, or a new tab when there is none. */
+function goHome() {
+  const home = state.settings.home, t = activeTab();
+  if (home && t) navigate(t.id, home); else if (home) openTab(home); else openCmd('new');
+}
 function reopenClosed() {
-  const t = closed.pop();
-  if (t) openTab(t.url, { spaceId: state.spaces.some(s => s.id === t.space) ? t.space : state.activeSpace });
+  const group = closed.pop();
+  if (!group?.length) return;
+  const at = t => ({ spaceId: state.spaces.some(s => s.id === t.space) ? t.space : state.activeSpace });
+  openTab(group[0].url, at(group[0]));
+  for (const t of group.slice(1).reverse()) openTab(t.url, { ...at(t), focus: false });
+  toast(group.length > 1 ? `Reopened ${group.length} tabs` : 'Reopened tab');
 }
 
 function pinTab(id, pin = true, index) {
@@ -691,6 +709,29 @@ function openEssential(e) {
   if (view !== 'page') setView('page');
   showPage(t.id);
   render(); save();
+}
+/* An element that has just landed somewhere new glides there from where it was, instead of appearing. */
+function flipFrom(from, selector) {
+  const el = document.querySelector(selector);
+  if (!from || !el || !el.animate) return;
+  const to = el.getBoundingClientRect();
+  const dx = from.left + from.width / 2 - (to.left + to.width / 2), dy = from.top + from.height / 2 - (to.top + to.height / 2);
+  const k = Math.min(2, Math.max(.45, Math.sqrt((from.width * from.height) / Math.max(1, to.width * to.height))));
+  el.style.zIndex = 5;
+  el.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${k})`, opacity: .55 }, { transform: 'none', opacity: 1 }],
+    { duration: 340, easing: 'cubic-bezier(.2, .8, .2, 1)' }).onfinish = () => { el.style.zIndex = ''; };
+}
+/* Out of Essentials and into the space's tabs: the tab keeps its page (no reload) and slides to the top of Today. */
+function essToTab(id) {
+  const e = state.essentials.find(x => x.id === id);
+  if (!e) return;
+  const from = document.querySelector(`.essential[data-id="${id}"]`)?.getBoundingClientRect(), s = space();
+  let t = Object.values(state.tabs).find(x => x.ess === id);
+  if (t) { t.ess = null; t.home = null; t.space = s.id; } else { t = { id: uid(), url: e.url, title: e.title, space: s.id, home: null, last: Date.now() }; state.tabs[t.id] = t; }
+  s.today.unshift(t.id);
+  state.essentials = state.essentials.filter(x => x.id !== id);
+  render(); save();
+  flipFrom(from, `.tab[data-id="${t.id}"]`);
 }
 function removeEssential(id) {
   const t = Object.values(state.tabs).find(x => x.ess === id);
@@ -1270,15 +1311,32 @@ function tabRow(t, section) {
   const s = space();
   const drift = t.home && path(t.url) !== path(t.home);
   const li = h('li', {
-    class: `tab${s.active === t.id ? ' active' : ''}${live.has(t.id) ? '' : ' unloaded'}${loading.has(t.id) ? ' loading' : ''}${s.split?.includes(t.id) ? ' in-split' : ''}`,
+    class: `tab${s.active === t.id ? ' active' : ''}${selected.has(t.id) ? ' selected' : ''}${live.has(t.id) ? '' : ' unloaded'}${loading.has(t.id) ? ' loading' : ''}${s.split?.includes(t.id) ? ' in-split' : ''}`,
     draggable: true, dataset: { id: t.id }, title: t.url, role: 'button', tabindex: 0,
-    onclick: e => { if (!e.target.closest('.x,.drift')) activate(t.id); },
+    onclick: e => {
+      if (e.target.closest('.x,.drift')) return;
+      if (e.ctrlKey || e.metaKey) { selected.has(t.id) ? selected.delete(t.id) : selected.add(t.id); selAnchor = t.id; return paintSel(); }
+      if (e.shiftKey && selAnchor) { selectRange(selAnchor, t.id); return paintSel(); }
+      if (selected.size) { selected.clear(); paintSel(); }
+      selAnchor = t.id;
+      activate(t.id);
+    },
     onauxclick: e => { if (e.button === 1) closeTab(t.id); },
     ondblclick: () => rename(li, t),
-    onkeydown: e => { if (e.key === 'Enter') activate(t.id); if (e.key === 'Delete') closeTab(t.id); },
-    oncontextmenu: e => { e.preventDefault(); tabMenu(t, e.clientX, e.clientY); },
-    ondragstart: e => { dragId = t.id; e.dataTransfer.setData('rainbow/tab', t.id); e.dataTransfer.setData('text/uri-list', t.url); li.classList.add('dragging'); },
-    ondragend: () => { dragId = 0; hideEssGhost(); li.classList.remove('dragging'); },
+    onkeydown: e => { if (e.key === 'Enter') activate(t.id); if (e.key === 'Delete') closeTabs(selected.has(t.id) ? [...selected] : [t.id]); },
+    oncontextmenu: e => {
+      e.preventDefault();
+      if (selected.has(t.id) && selected.size > 1) return multiMenu(e.clientX, e.clientY);
+      if (selected.size) { selected.clear(); paintSel(); }
+      tabMenu(t, e.clientX, e.clientY);
+    },
+    ondragstart: e => {
+      dragId = t.id; e.dataTransfer.setData('rainbow/tab', t.id); e.dataTransfer.setData('text/uri-list', t.url); li.classList.add('dragging');
+      // What follows the pointer is a small glass chip with the page's icon and name, not a picture of the whole row.
+      const chip = h('div', { class: 'drag-chip' }, favicon(t.url, 16), h('span', {}, (selected.size > 1 && selected.has(t.id) ? `${selected.size} tabs` : t.custom || t.title || hostOf(t.url))));
+      document.body.append(chip); e.dataTransfer.setDragImage(chip, 16, 18); setTimeout(() => chip.remove());
+    },
+    ondragend: () => { dragId = 0; hideEssGhost(); hideDropLine(); li.classList.remove('dragging'); },
   },
   favicon(t.url),
   h('span', { class: 'title' }, t.custom || t.title || hostOf(t.url)),
@@ -1401,6 +1459,7 @@ function render() {
       oncontextmenu: ev => { ev.preventDefault(); menu(ev.clientX, ev.clientY, [
         ['Open', () => openEssential(e)], ['Copy link', () => copyText(e.url, 'Link copied')],
         ['Save to Canvas', () => Rainbow.canvas?.saveUrl(e.url, e.title)], '-',
+        ['Move to tabs', () => essToTab(e.id)],
         ['Remove from Essentials', () => removeEssential(e.id), 'danger']]); },
     }, favicon(e.url, 20));
   }) : [essZone()]));
@@ -1587,11 +1646,30 @@ function newItemMenu(btn) {
   m.style.top = Math.max(6, r.top - m.offsetHeight - 8) + 'px';
 }
 
+const paintSel = () => document.querySelectorAll('.tab[data-id]').forEach(li => li.classList.toggle('selected', selected.has(+li.dataset.id)));
+function selectRange(a, b) {
+  const ids = [...document.querySelectorAll('#sidebar .tab[data-id]')].map(li => +li.dataset.id).filter(Boolean);
+  const i = ids.indexOf(a), k = ids.indexOf(b);
+  if (i < 0 || k < 0) return;
+  selected.clear();
+  for (const id of ids.slice(Math.min(i, k), Math.max(i, k) + 1)) selected.add(id);
+}
+function multiMenu(x, y) {
+  const ids = [...selected].filter(id => tab(id)), n = ids.length;
+  menu(x, y, [
+    [`Close ${n} tabs`, () => closeTabs(ids), 'danger'],
+    [`Pin ${n} tabs`, () => { for (const id of ids) if (!tab(id).home && !tab(id).ess) pinTab(id, true); selected.clear(); render(); }],
+    [`Save ${n} tabs to Canvas`, () => { for (const id of ids) Rainbow.canvas?.saveTab(id); selected.clear(); render(); }],
+    ...state.spaces.filter(s => s.id !== state.activeSpace).map(s => [`Move to ${s.icon} ${s.name}`, () => { for (const id of ids) moveTabToSpace(id, s.id); selected.clear(); render(); }]),
+    '-',
+    ['Clear selection', () => { selected.clear(); paintSel(); }],
+  ]);
+}
 function tabMenu(t, x, y) {
   const pinned = !!t.home && !t.ess;
   menu(x, y, [
     [pinned ? 'Unpin' : 'Pin tab', () => pinTab(t.id, !pinned), '', 'Ctrl+Shift+D'],
-    ['Add to Essentials', () => { addEssential(t.url, t.title); }],
+    ['Add to Essentials', () => { const from = document.querySelector(`.tab[data-id="${t.id}"]`)?.getBoundingClientRect(), made = addEssential(t.url, t.title); if (made) flipFrom(from, `.essential[data-id="${made.id}"]`); }],
     ['Save to Canvas', () => Rainbow.canvas?.saveTab(t.id), '', 'Ctrl+D'],
     ['Rename', () => { const li = document.querySelector(`.tab[data-id="${t.id}"]`); if (li) rename(li, t); }],
     ['Copy link', () => copyText(t.url, 'Link copied')],
@@ -1602,7 +1680,20 @@ function tabMenu(t, x, y) {
     ...state.spaces.filter(s => s.id !== t.space).map(s => [`Move to ${s.icon} ${s.name}`, () => moveTabToSpace(t.id, s.id)]),
     '-',
     [pinned ? 'Remove pin' : 'Close tab', () => { if (pinned) { pinTab(t.id, false); closeTab(t.id); } else closeTab(t.id); }, 'danger'],
+    ...closeMore(t),
+    ...(closed.length ? ['-', [closed.at(-1).length > 1 ? `Reopen ${closed.at(-1).length} closed tabs` : 'Reopen closed tab', reopenClosed, '', 'Ctrl+Shift+T']] : []),
   ]);
+}
+/* Close the tabs above, below or all but this one, among the loose tabs of its space. */
+function closeMore(t) {
+  const s = state.spaces.find(x => x.id === t.space), today = s?.today || [], i = today.indexOf(t.id);
+  if (i < 0) return [];
+  const above = today.slice(0, i), below = today.slice(i + 1), others = today.filter(id => id !== t.id);
+  const items = [];
+  if (above.length) items.push([`Close ${above.length} tab${above.length > 1 ? 's' : ''} above`, () => closeTabs(above), 'danger']);
+  if (below.length) items.push([`Close ${below.length} tab${below.length > 1 ? 's' : ''} below`, () => closeTabs(below), 'danger']);
+  if (others.length) items.push([`Close ${others.length} other tab${others.length > 1 ? 's' : ''}`, () => closeTabs(others), 'danger']);
+  return items;
 }
 function spaceMenu(s, x, y) {
   menu(x, y, [
@@ -2088,10 +2179,10 @@ function openSpaceSettings(s = space()) {
 }
 
 /* Settings is a page with a left rail of sections, with its own left rail. */
-const SETTINGS_SECTIONS = [['look', 'Look and Feel'], ['tabs', 'Tabs and browsing'], ['profiles', 'Spaces and profiles'], ['mods', 'Extensions and themes'],
+const SETTINGS_SECTIONS = [['general', 'General'], ['look', 'Look and Feel'], ['tabs', 'Tabs and browsing'], ['profiles', 'Spaces and profiles'], ['mods', 'Extensions and themes'],
   ['ask', 'Ask Rainbow'], ['models', 'On-device models'], ['keys', 'Keyboard shortcuts'], ['data', 'Data']];
 const heading = t => h('h3', { class: 'set-h' }, t);
-function openSettings(section = 'look') {
+function openSettings(section = 'general') {
   const st = state.settings;
   // Settings is a page in the web frame, so it uses the page's own ink and lines rather than the
   // floating panel's glass tokens.
@@ -2156,6 +2247,22 @@ function openSettings(section = 'look') {
       field('Page margin', range(st.inset, 0, 20, v => set('inset', v))),
       field('Overlay blur', range(st.blur, 0, 60, v => set('blur', v))),
       h('p', { class: 'hint' }, 'To change a space’s name, icon or colours, right-click it.'),
+    ],
+    general: () => [
+      heading('General'),
+      h('p', { class: 'hint' }, 'Default browser, startup and the home page.'),
+      h('div', { class: 'set-card' },
+        h('div', { class: 'set-card-text' }, h('strong', {}, 'Make Rainbow your everyday browser'), h('span', { class: 'hint' }, 'Open the links from other apps in a familiar place.')),
+        h('button', { class: 'btn primary', onclick: () => (NATIVE ? send({ t: 'default_apps' }) : toast('Open your system settings to choose a default browser.')) }, 'Set as default')),
+      heading('Startup'),
+      field('Open Rainbow when you sign in', seg([[true, 'On'], [false, 'Off']], !!st.autostart, v => { st.autostart = v; save(); send({ t: 'autostart', on: v }); draw(); })),
+      field('Home page', h('div', { class: 'row-btns', style: 'justify-content:flex-start;gap:6px' },
+        h('input', { type: 'text', placeholder: 'https://example.com', value: st.home || '', id: 'homeInput', style: 'flex:1;min-width:0' }),
+        h('button', { class: 'btn', onclick: () => { const v = $('#homeInput').value.trim(); st.home = v ? toUrl(v) : ''; save(); toast(st.home ? 'Home page saved' : 'Home page cleared'); } }, 'Save'))),
+      h('p', { class: 'hint' }, 'Where the Home command and Alt+Home lead. Leave it empty to open a new tab.'),
+      heading('Search'),
+      field('Search engine', h('select', { onchange: e => set('search', e.target.value) },
+        Object.keys(SEARCH).map(k => h('option', { value: k, selected: st.search === k }, k[0].toUpperCase() + k.slice(1))))),
     ],
     tabs: () => [
       heading('Tabs'),
@@ -2352,6 +2459,7 @@ const ACTIONS = [
   ['Save this page to Canvas', () => Rainbow.canvas?.saveTab(space().active), '🔖'],
   ['Clear Today tabs', () => clearToday(), '✕'],
   ['Reopen closed tab', () => reopenClosed(), '↺'],
+  ['Home', () => goHome(), '⌂'],
   ['Archive', () => openArchive(), '🗄'],
   ['Copy URL', () => activeTab() && navigator.clipboard?.writeText(activeTab().url), '⧉'],
 ];
@@ -2563,11 +2671,12 @@ function onKey(e) {
   const run = fn => { e.preventDefault(); fn(); };
   if (e.altKey && !mod && k === 'ArrowLeft' && t) return run(() => send({ t: 'exec', id: t.id, js: 'history.back()' }));
   if (e.altKey && !mod && k === 'ArrowRight' && t) return run(() => send({ t: 'exec', id: t.id, js: 'history.forward()' }));
+  if (e.altKey && !mod && k === 'Home') return run(goHome);
   if (!mod) return;
   if (k === 't' && e.shiftKey) return run(reopenClosed);
   if (k === 't') return run(() => openCmd('new'));
   if (k === 'l') return run(() => openCmd('edit'));
-  if (k === 'w') return run(() => t && closeTab(t.id));
+  if (k === 'w') return run(() => (selected.size > 1 ? closeTabs([...selected]) : t && closeTab(t.id)));
   if (k === 'r') return run(() => t && send({ t: 'exec', id: t.id, js: 'location.reload()' }));
   if (k === 's' && e.shiftKey) return run(openShotTool);
   if (k === 's') return run(toggleSidebar);
@@ -2584,6 +2693,7 @@ function onKey(e) {
   if (/^[1-9]$/.test(k)) return run(() => state.spaces[+k - 1] && switchSpace(state.spaces[+k - 1].id));
 }
 addEventListener('keydown', e => {
+  if (e.key === 'Escape' && selected.size) { selected.clear(); paintSel(); }
   if (e.key === 'Escape') { closeAll(); return; }
   if (e.target.closest?.('input,textarea,select') && !(e.ctrlKey || e.metaKey)) return;
   onKey(e);
@@ -2847,16 +2957,27 @@ $('#pinnedList').addEventListener('drop', e => {
   const fid = +e.dataTransfer.getData('rainbow/folder'), f = space().folders.find(x => x.id === fid);
   if (f) { f.parent = null; render(); save(); }
 });
+/* Where a dragged tab will land is one thin line with a ring at its start, between the two rows, not a
+   highlighted zone. */
+const dropLine = h('div', { id: 'dropLine', hidden: true });
+document.body.append(dropLine);
+const hideDropLine = () => { dropLine.hidden = true; };
+function showDropLine(list, y) {
+  const rows = [...list.querySelectorAll(':scope > .tab:not(.dragging), :scope > .folder')], i = dropIndex(list, y), lr = list.getBoundingClientRect();
+  const top = !rows.length ? lr.top + 3 : i < rows.length ? rows[i].getBoundingClientRect().top - 1 : rows.at(-1).getBoundingClientRect().bottom + 1;
+  Object.assign(dropLine.style, { left: lr.left + 6 + 'px', width: lr.width - 12 + 'px', top: top + 'px' });
+  dropLine.hidden = false;
+}
 for (const list of [$('#pinnedList'), $('#todayList')]) {
   list.addEventListener('dragover', e => {
     if (!e.dataTransfer.types.some(x => x === 'rainbow/tab' || x === 'text/uri-list' || (x === 'rainbow/folder' && list.id === 'pinnedList'))) return;
     e.preventDefault();
-    list.classList.add('drop-target');
+    showDropLine(list, e.clientY);
   });
-  list.addEventListener('dragleave', () => list.classList.remove('drop-target'));
+  list.addEventListener('dragleave', e => { if (!list.contains(e.relatedTarget)) hideDropLine(); });
   list.addEventListener('drop', e => {
     e.preventDefault();
-    list.classList.remove('drop-target');
+    hideDropLine();
     const id = +e.dataTransfer.getData('rainbow/tab');
     const pinned = list.dataset.section === 'pinned';
     if (id && tab(id)) {
@@ -2883,7 +3004,12 @@ $('#essentials').addEventListener('drop', e => {
   e.preventDefault();
   hideEssGhost();
   const t = tab(+e.dataTransfer.getData('rainbow/tab'));
-  if (t && !t.ess) { addEssential(t.home || t.url, t.custom || t.title); if (!t.home) closeTab(t.id); }
+  if (!t || t.ess) return;
+  const from = document.querySelector(`.tab[data-id="${t.id}"]`)?.getBoundingClientRect();
+  const url = t.home || t.url, title = t.custom || t.title;
+  if (!t.home) closeTab(t.id);
+  const made = addEssential(url, title);
+  if (made) flipFrom(from, `.essential[data-id="${made.id}"]`);
 });
 $('#urlPill').addEventListener('dragover', e => e.preventDefault()); // drop target for an empty Essentials row
 $('#urlPill').addEventListener('drop', e => { e.preventDefault(); const t = tab(+e.dataTransfer.getData('rainbow/tab')); if (t && !state.essentials.length) addEssential(t.url, t.title); });
@@ -3290,7 +3416,7 @@ const Rainbow = window.Rainbow = {
   get state() { return state; }, NATIVE, h, $, uid, save, render, toast, menu, panel, closePanel, field, seg,
   hostOf, toUrl, favicon, send, recv, snapshot, ocr, putMedia, delMedia, evalIn, veilOn, veilOff, closeAll,
   space, tab, activeTab, live, openTab, activate, navigate, closeTab, pinTab, moveTabToSpace,
-  addEssential, openEssential, removeEssential, clearToday, switchSpace, createSpace, deleteSpace,
+  addEssential, openEssential, removeEssential, essToTab, closeTabs, clearToday, switchSpace, createSpace, deleteSpace,
   frameMenu, compactMenu, newTabMenu, linkMenu, setLayout, cbarAuto, placeChrome,
   openSitePop, openShotTool, spaceMenu,
   pageShot: async () => { const p = panes[0]; const data = p && await snapshot(p.id); return data ? { data, x: p.x, y: p.y, w: p.w, h: p.h } : null; },
