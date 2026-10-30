@@ -2743,7 +2743,7 @@ document.addEventListener('pointerdown', e => {
   if (!NATIVE || e.button !== 0) return;
   const edge = e.target.closest?.('#edges i');
   if (edge) { e.preventDefault(); return send({ t: 'win', op: 'resize', dir: edge.dataset.dir }); }
-  if (e.target.matches?.('[data-drag], .side-bottom, .space-head, .tab-scroll, body, .app, .sidebar, #topbar')) send({ t: 'win', op: 'drag' });
+  if (e.target.matches?.('[data-drag], .side-bottom, .space-head, .tab-scroll, body, .app, .sidebar, #topbar, .nav, .win-controls, .tb-right, .cbar, .cb-left, .cb-mid, .cb-right, .cb-slot')) send({ t: 'win', op: 'drag' });
 });
 $('.side-top').addEventListener('dblclick', e => { if (!e.target.closest('button')) send({ t: 'win', op: 'max' }); });
 $('#topbar').addEventListener('dblclick', e => { if (!e.target.closest('button')) send({ t: 'win', op: 'max' }); });

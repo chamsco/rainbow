@@ -1390,3 +1390,6 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .split-row:hover .vsep-wrap .vsep { opacity: 0; }
 .split-row:hover .vsep-wrap .x { opacity: 1; pointer-events: auto; }
 .split-row.tab { padding-right: 0; }
+
+/* The native clip cuts the peeked sidebar off at its column edge, so its soft shadow would end in a hard dark line there. */
+:root[data-native] .app.peek .sidebar { box-shadow: 0 0 0 1px rgba(0,0,0,.07); }
