@@ -43,11 +43,19 @@
     tracking = setInterval(() => { sendBand(); if (Date.now() > until) { clearInterval(tracking); tracking = 0; } }, 16);
   }
 
+  // Lay the shell's gradient behind the notch where the window would have it (see rainbow.css).
+  function paint() {
+    const w = form.offsetWidth, s = form.style;
+    s.setProperty('--gw', innerWidth + 'px'); s.setProperty('--gh', innerHeight + 'px');
+    s.setProperty('--nw', w + 'px');
+    s.setProperty('--gx', -(innerWidth - w) / 2 + 'px'); s.setProperty('--gy', -(innerHeight - form.offsetHeight) + 'px');
+  }
   function show() {
     if (blocked() || armed) { if (armed) input.focus(); return; }
     armed = true;
     clearTimeout(hideTimer);
     form.hidden = false;
+    paint();
     form.getBoundingClientRect();           // start from where it is hidden, then rise
     form.classList.add('show');
     follow();
@@ -71,7 +79,7 @@
   const observer = new MutationObserver(() => { if (armed && blocked()) hide(); });
   for (const sel of ['#ask', '#panel', '#cmdbar', '#menu', '#menuSub', '#shotTool', '#newSpace', '#canvasView', '#settingsView', '#page'])
     observer.observe($(sel), { attributes: true, attributeFilter: ['hidden', 'class'] });
-  addEventListener('resize', () => { if (armed) sendBand(); });
+  addEventListener('resize', () => { if (armed) { paint(); sendBand(); } });
   new ResizeObserver(() => { if (armed) sendBand(); }).observe($('#pageCard'));
   // Leaving the field (a click into the page, another window) puts it away; moving between its own buttons does not.
   form.addEventListener('focusout', e => {

@@ -1222,14 +1222,16 @@ const ico = {
   x: '<svg viewBox="0 0 16 16"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>',
 };
 
-/* A split is one row in the sidebar: both pages' names, with a thin vertical line between them. */
+/* A split is one row in the sidebar: both pages' names, a thin line between them that turns into an x on hover. */
 function splitRow(ta, tb, section) {
   const s = space();
   const half = t => h('span', { class: 'half' + (s.active === t.id ? ' on' : ''), title: t.url, role: 'button', tabindex: 0,
     onclick: () => activate(t.id), oncontextmenu: e => { e.preventDefault(); e.stopPropagation(); tabMenu(t, e.clientX, e.clientY); } },
     favicon(t.url), h('span', { class: 'title' }, t.custom || siteName(t.url)));
-  return h('li', { class: 'tab split-row', dataset: { id: ta.id } }, half(ta), h('i', { class: 'vsep' }), half(tb),
-    h('button', { class: 'x', title: 'Close split view', 'aria-label': 'Close split view', innerHTML: ico.x, onclick: unsplit }));
+  return h('li', { class: 'tab split-row', dataset: { id: ta.id } }, half(ta),
+    h('span', { class: 'vsep-wrap' }, h('i', { class: 'vsep' }),
+      h('button', { class: 'x', title: 'Close split view', 'aria-label': 'Close split view', innerHTML: ico.x, onclick: unsplit })),
+    half(tb));
 }
 /* The rows for a list of tab ids: a split whose two pages are both in the list becomes one row. */
 function tabRows(ids, section) {

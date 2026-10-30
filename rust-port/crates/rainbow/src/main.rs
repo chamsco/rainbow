@@ -1105,7 +1105,7 @@ impl App {
         self.clipped = want.is_some();
         let Some(c) = &self.chrome else { return };
         let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor());
-        chrome_over(c, want, scale, win, &self.panes, self.chrome_bar_h, self.chrome_bar_w, &band, self.chrome_right);
+        chrome_over(c, want, scale, win, &self.panes, self.chrome_bar_h, self.chrome_bar_w, &band, self.chrome_right, self.radius);
     }
 
     /// Rebuild the exact corner regions once the window has stopped moving.
@@ -1989,7 +1989,7 @@ fn round(wv: &WebView, size: wry::dpi::PhysicalSize<f64>, r: f64) {
     // The window owns the region after SetWindowRgn, so it is never freed here.
     unsafe {
         let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d);
-        SetWindowRgn(wv.hwnd(), Some(rgn), false);
+        SetWindowRgn(wv.hwnd(), Some(rgn), true);
     }
 }
 // ponytail: macOS pages stay square; upgrade path is the WKWebView layer's cornerRadius.
@@ -2055,9 +2055,9 @@ fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale
 /// not painted and does not take clicks, so the page stays live underneath and the page never
 /// has to be resized. `width: None` puts the chrome back behind the pages.
 #[cfg(windows)]
-fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64, band: &[Band], right: bool) {
+fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64, band: &[Band], right: bool, radius: f64) {
     use windows::Win32::Graphics::Gdi::{
-        CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_DIFF, RGN_OR,
+        CombineRgn, CreateRectRgn, CreateRoundRectRgn, DeleteObject, SetWindowRgn, RGN_DIFF, RGN_OR,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         SetWindowPos, HWND_BOTTOM, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
@@ -2067,6 +2067,8 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
     let (w, hgt) = (win.0.max(1), win.1.max(1));
     // The strip is only as wide as the bar: 0 means the whole window, a width means the bar is
     // riding the peeked sidebar and the page beside it must keep its pixels.
+    // The pages are rounded, so the holes are too: the corner the page gives up is the chrome's to paint.
+    let d = (radius * scale * 2.0).round() as i32;
     let bw = if bar_w > 0.0 { (bar_w * scale).round() as i32 } else { w };
     unsafe {
         let Some(px) = width else {
@@ -2078,7 +2080,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
                 let (holes, _) = overlay_parts(win, panes, 0.0, scale, right);
                 let rgn = CreateRectRgn(0, 0, w, hgt);
                 for (l, t, r, b) in holes {
-                    let hole = CreateRectRgn(l, t, r, b);
+                    let hole = CreateRoundRectRgn(l, t, r + 1, b + 1, d, d);
                     CombineRgn(Some(rgn), Some(rgn), Some(hole), RGN_DIFF);
                     let _ = DeleteObject(hole.into());
                 }
@@ -2101,7 +2103,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
         // margins, the toolbar strip and the split gap keep the chrome's)...
         let rgn = CreateRectRgn(0, 0, w, hgt);
         for (l, t, r, b) in holes {
-            let hole = CreateRectRgn(l, t, r, b);
+            let hole = CreateRoundRectRgn(l, t, r + 1, b + 1, d, d);
             CombineRgn(Some(rgn), Some(rgn), Some(hole), RGN_DIFF);
             let _ = DeleteObject(hole.into());
         }
@@ -2125,7 +2127,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
 // ponytail: on macOS the page webview is an NSView above the chrome's, so the same clip needs
 // `addSubview:positioned:`. The CSS overlay still works there, the page just covers it.
 #[cfg(not(windows))]
-fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: &[Band], _: bool) {}
+fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: &[Band], _: bool, _: f64) {}
 
 /// Start Windows voice typing (Win+H) into whatever has focus: Ask Rainbow's input.
 #[cfg(windows)]

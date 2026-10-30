@@ -1367,7 +1367,9 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 /* One fixed gradient, the same as the frame behind it, with no highlight laid over it: the notch and the
    frame under the page read as one piece. Hidden by default; it rises from the bottom edge and sinks back. */
 .composer {
-  background: var(--space-grad); background-attachment: fixed;
+  /* A fixed background stops being fixed on an element that moves, so the shell's gradient is laid out by hand:
+     the whole window's size, shifted back by where the notch sits (set by composer.js). */
+  background: var(--space-grad) var(--gx, 0) var(--gy, 0) / var(--gw, 100vw) var(--gh, 100vh) no-repeat; background-attachment: scroll;
   transform: translateY(calc(100% + 6px)); opacity: 0; visibility: hidden;
   transition: transform .42s var(--ease), opacity .24s var(--ease), visibility 0s linear .42s;
 }
@@ -1376,3 +1378,15 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
    would leave a dark fringe of the chrome's own background along it. */
 :root[data-os="windows"] .composer::before, :root[data-os="windows"] .composer::after { -webkit-mask: none; mask: none; }
 @media (prefers-reduced-motion: reduce) { .composer, .composer.show { transition: opacity .15s linear; transform: none; } }
+
+.composer::before, .composer::after { background-attachment: scroll; background-repeat: no-repeat; background-size: var(--gw, 100vw) var(--gh, 100vh); }
+.composer::before { background-position: calc(var(--gx, 0px) + var(--notch-r)) calc(var(--gy, 0px) + var(--notch-r)); }
+.composer::after { background-position: calc(var(--gx, 0px) - var(--nw, 0px)) calc(var(--gy, 0px) + var(--notch-r)); }
+
+/* The split row's close sits between the two halves: a line at rest, an x when the row is hovered. */
+.split-row .vsep-wrap { position: relative; flex: none; width: 20px; height: 100%; display: grid; place-items: center; }
+.split-row .vsep-wrap .vsep { margin: 0; transition: opacity var(--motion) var(--ease); }
+.split-row .vsep-wrap .x { position: absolute; inset: 0; margin: auto; width: 20px; height: 20px; border-radius: 50%; opacity: 0; pointer-events: none; transition: opacity var(--motion) var(--ease); }
+.split-row:hover .vsep-wrap .vsep { opacity: 0; }
+.split-row:hover .vsep-wrap .x { opacity: 1; pointer-events: auto; }
+.split-row.tab { padding-right: 0; }
