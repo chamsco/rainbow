@@ -1393,3 +1393,16 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 
 /* The native clip cuts the peeked sidebar off at its column edge, so its soft shadow would end in a hard dark line there. */
 :root[data-native] .app.peek .sidebar { box-shadow: 0 0 0 1px rgba(0,0,0,.07); }
+
+/* ---------- the notch, round two: it lives on the window, reaches the bottom edge, and is driven by composer.js ---------- */
+.composer {
+  position: fixed; bottom: 0; translate: none; z-index: 40; padding-bottom: 8px;
+  transition: none; opacity: 1; visibility: visible;
+  background: var(--space-grad) var(--gx, 0) var(--gy, 0) / var(--gw, 100vw) var(--gh, 100vh) no-repeat;
+}
+.composer.show { transition: none; }
+.composer[hidden] { display: none; }
+/* The hot strip under the notch: the frame's bottom margin, and the lip once it is out. */
+#notchHot { position: fixed; bottom: 4px; z-index: 41; height: 4px; cursor: pointer; }
+#notchHot[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .composer { transition: none; } }

@@ -2623,7 +2623,8 @@ const peekW = () => state.settings.layout === 'compact'
 function sidebarOverlay(on, w, force) {
   if (sideOver === on && !force) return;
   sideOver = on;
-  send({ t: 'chrome', over: { on, w: w || peekW(), right: state.settings.side === 'right' } });
+  // The floating sidebar stops one inset short of the column's edge; clipping to it exactly leaves no dark strip beside it.
+  send({ t: 'chrome', over: { on, w: (w || peekW()) - 8, right: state.settings.side === 'right' } });
 }
 // Leaving the sidebar is not a snap. The pointer gets a moment of leeway to come back — you
 // cross the panel on the way to the page all the time — and the panel fades out instead of

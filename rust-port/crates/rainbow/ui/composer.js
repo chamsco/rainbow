@@ -9,78 +9,99 @@
 (() => {
   const { $, send } = Rainbow;
   const form = $('#composer'), input = $('#cpInput'), model = $('#cpModel');
-  const FLARE = 22, NR = 22, MS = 420;
-  let armed = false, bandOn = false, tracking = 0, hideTimer = 0;
+  const FLARE = 22, NR = 22, LIP = .32;
+  document.body.append(form);                       // the notch reaches through the frame's bottom margin, so it lives outside the page card
+  const hot = Object.assign(document.createElement('div'), { id: 'notchHot', hidden: true });
+  document.body.append(hot);
+  let armed = false, bandOn = false, p = 0, goal = 0, timer = 0, geo = null;
   const isAsk = () => !$('#ask').hidden;
   const blocked = () => Rainbow.view !== 'page' || isAsk() ||
     !$('#panel').hidden || !$('#cmdbar').hidden || !$('#menu').hidden || !$('#menuSub').hidden ||
     !$('#shotTool').hidden || !$('#newSpace').hidden;
 
-  // The strips for the notch where it is right now, cut off at the page's bottom edge.
-  function bandMessage() {
-    const r = form.getBoundingClientRect(), edge = $('#pageCard').getBoundingClientRect().bottom, R = Math.round, f = FLARE;
-    const strip = (x, y, w, h, cut) => (edge - y < 3 || w <= 0 || h <= 0) ? null : { x: R(x), y: R(y), w: R(w), h: R(Math.min(y + h, edge) - y), cut };
-    const disc = (cx, cy) => edge - (cy - NR) < 3 ? null : { y: R(cy), h: 1, disc: [R(cx), R(cy), NR] };
-    const top = r.bottom - f;
-    // The notch is two rectangles that leave its top corners out, and a round piece for each corner.
+  // Where the notch rests: centred under the page, its feet on the window's bottom edge.
+  function measure() {
+    const card = $('#pageCard').getBoundingClientRect();
+    const w = Math.min(780, card.width - 140), h = 66;
+    const cx = card.left + card.width / 2;
+    geo = { left: Math.round(cx - w / 2), w: Math.round(w), h, top: innerHeight - h, bottom: innerHeight };
+    const s = form.style;
+    s.left = geo.left + 'px'; s.width = geo.w + 'px'; s.height = h + 'px';
+    s.setProperty('--gw', innerWidth + 'px'); s.setProperty('--gh', innerHeight + 'px'); s.setProperty('--nw', geo.w + 'px');
+    s.setProperty('--gx', -geo.left + 'px'); s.setProperty('--gy', -geo.top + 'px');
+    hot.style.left = geo.left + 'px'; hot.style.width = geo.w + 'px';
+  }
+
+  // The strips for the part of the notch above `wipe`: nothing above that line is claimed, so the region and the
+  // notch can never disagree about what is there. The page shows through everywhere else.
+  function bandMessage(wipe) {
+    const { left, w, top, bottom } = geo, R = Math.round, f = FLARE;
+    const strip = (x, y, sw, h, cut) => {
+      const y0 = Math.max(y, wipe), y1 = y + h;
+      return y1 - y0 < 2 ? null : { x: R(x), y: R(y0), w: R(sw), h: R(y1 - y0), cut };
+    };
+    const disc = (cx, cy) => wipe > top + NR ? null : { y: R(cy), h: 1, disc: [R(cx), R(cy), NR] };
     const list = [
-      strip(r.left + NR, r.top, r.width - 2 * NR, r.height),
-      strip(r.left, r.top + NR, r.width, r.height - NR),
-      disc(r.left + NR, r.top + NR), disc(r.right - NR, r.top + NR),
-      strip(r.left - f, top, f, f, [R(r.left - f), R(top), f]),
-      strip(r.right, top, f, f, [R(r.right + f), R(top), f]),
+      strip(left + NR, top, w - 2 * NR, bottom - top),
+      strip(left, top + NR, w, bottom - top - NR),
+      disc(left + NR, top + NR), disc(left + w - NR, top + NR),
+      p > .85 ? strip(left - f, bottom - f, f, f, [R(left - f), R(bottom - f), f]) : null,
+      p > .85 ? strip(left + w, bottom - f, f, f, [R(left + w + f), R(bottom - f), f]) : null,
     ].filter(Boolean);
     return list.length ? { t: 'chrome', band: list } : null;
   }
-  function sendBand() {
-    const m = bandMessage();
+  // Rise and fall are one thing: how much of the notch is let out (0..1). The region wipes from the bottom edge up and the
+  // notch itself slides a third as far, so it always covers everything the region lets through.
+  function apply() {
+    const out = (1 - p) * geo.h;
+    form.style.transform = `translateY(${(out * .3).toFixed(1)}px)`;
+    hot.style.height = Math.max(4, geo.h * p - 4) + 'px';
+    const m = p > .004 ? bandMessage(geo.top + out) : null;
     if (m) { bandOn = true; send(m); }
+    else if (bandOn) { bandOn = false; if (!isAsk()) send({ t: 'chrome', band: null }); }
   }
-  // While the notch moves, follow it every few milliseconds. Timers, not frames: a hidden window makes none.
-  function follow() {
-    const until = Date.now() + MS + 80;
-    clearInterval(tracking);
-    tracking = setInterval(() => { sendBand(); if (Date.now() > until) { clearInterval(tracking); tracking = 0; } }, 16);
+  function run() {
+    clearInterval(timer);
+    timer = setInterval(() => {
+      p += (goal - p) * .2 + Math.sign(goal - p) * .004;
+      if (Math.abs(goal - p) < .006) { p = goal; clearInterval(timer); timer = 0; }
+      form.hidden = p <= .004;
+      apply();
+    }, 14);
+  }
+  function go(to) {
+    if (!geo || to > goal) { measure(); }
+    form.hidden = false; goal = to; run();
   }
 
-  // Lay the shell's gradient behind the notch where the window would have it (see rainbow.css).
-  function paint() {
-    const w = form.offsetWidth, s = form.style;
-    s.setProperty('--gw', innerWidth + 'px'); s.setProperty('--gh', innerHeight + 'px');
-    s.setProperty('--nw', w + 'px');
-    s.setProperty('--gx', -(innerWidth - w) / 2 + 'px'); s.setProperty('--gy', -(innerHeight - form.offsetHeight) + 'px');
-  }
   function show() {
-    if (blocked() || armed) { if (armed) input.focus(); return; }
-    armed = true;
-    clearTimeout(hideTimer);
-    form.hidden = false;
-    paint();
-    form.getBoundingClientRect();           // start from where it is hidden, then rise
-    form.classList.add('show');
-    follow();
-    setTimeout(() => input.focus(), 160);
+    if (blocked()) return;
+    if (armed) { input.focus(); return; }
+    armed = true; hot.style.pointerEvents = 'none';
+    go(1);
+    setTimeout(() => input.focus(), 180);
   }
   function hide() {
     if (!armed) return;
-    armed = false;
-    form.classList.remove('show');
-    follow();
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      if (armed) return;
-      form.hidden = true;
-      if (bandOn) { bandOn = false; if (!isAsk()) send({ t: 'chrome', band: null }); }
-    }, MS);
+    armed = false; hot.style.pointerEvents = '';
+    go(0);
   }
   const toggle = () => (armed ? hide() : show());
 
+  // The lip: hovering the frame's bottom edge under the notch lets the top of it out, and a click opens it.
+  hot.addEventListener('pointerenter', () => { if (!armed && !blocked()) go(LIP); });
+  hot.addEventListener('pointerleave', () => { if (!armed) go(0); });
+  hot.addEventListener('click', show);
+  const syncHot = () => { hot.hidden = armed ? true : blocked(); if (!hot.hidden && p === 0) measure(); };
+  setInterval(syncHot, 300);
+
   // Anything that takes the page over (a view, a menu, the chat itself) puts the notch away.
-  const observer = new MutationObserver(() => { if (armed && blocked()) hide(); });
+  const observer = new MutationObserver(() => { if (armed && blocked()) hide(); syncHot(); });
   for (const sel of ['#ask', '#panel', '#cmdbar', '#menu', '#menuSub', '#shotTool', '#newSpace', '#canvasView', '#settingsView', '#page'])
     observer.observe($(sel), { attributes: true, attributeFilter: ['hidden', 'class'] });
-  addEventListener('resize', () => { if (armed) { paint(); sendBand(); } });
-  new ResizeObserver(() => { if (armed) sendBand(); }).observe($('#pageCard'));
+  const relayout = () => { if (p > 0) { measure(); apply(); } };
+  addEventListener('resize', relayout);
+  new ResizeObserver(relayout).observe($('#pageCard'));
   // Leaving the field (a click into the page, another window) puts it away; moving between its own buttons does not.
   form.addEventListener('focusout', e => {
     if (form.contains(e.relatedTarget)) return;
