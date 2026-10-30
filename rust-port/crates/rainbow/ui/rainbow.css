@@ -1417,7 +1417,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-os="windows"] .wc svg { width: 18px; height: 18px; stroke-width: 1.15; }
 
 /* Room above the notch's content so the lip that peeks out on hover shows plain colour, never half a button. */
-.composer { padding-top: 12px; }
+.composer { padding-top: 22px; }
 
 /* Settings as two fixed cards on the frame's own tint: the sections on the left, the section on the right. */
 .settings-view { background: color-mix(in oklab, var(--ink) 10%, #fff); }
@@ -1436,3 +1436,10 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 
 /* The menu button is a small rainbow, in its own colours. */
 .rb-ic { width: 18px; height: 18px; } .rb-ic path { stroke-width: 1.9; stroke-linecap: round; }
+
+/* The rim: the page, blurred, hugging the notch's head and sides; the top edge fades in so the blur never ends in a hard cut. */
+#cpRim { position: fixed; z-index: 39; overflow: hidden; pointer-events: none; }
+#cpRim[hidden] { display: none; }
+#cpRim img { position: absolute; max-width: none; }
+#cpRim .soft { position: absolute; inset: 0; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 3px); mask-image: linear-gradient(to bottom, transparent 0, #000 3px); }
+#cpRim .soft img { filter: blur(5px) saturate(1.3); }

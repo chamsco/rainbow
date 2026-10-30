@@ -3293,6 +3293,7 @@ const Rainbow = window.Rainbow = {
   addEssential, openEssential, removeEssential, clearToday, switchSpace, createSpace, deleteSpace,
   frameMenu, compactMenu, newTabMenu, linkMenu, setLayout, cbarAuto, placeChrome,
   openSitePop, openShotTool, spaceMenu,
+  pageShot: async () => { const p = panes[0]; const data = p && await snapshot(p.id); return data ? { data, x: p.x, y: p.y, w: p.w, h: p.h } : null; },
   siteName, newFolder, newSpace, openNewSpace, closeNewSpace, folderToSpace, splitMenu, splitPicker, appMenu, openPeek, closePeek, applyTheme, setBoost, openBoost, openSettings, openSpaceSettings, openCmd, syncPage, splitWith, unsplit, setView, toggleSidebar, reopenClosed, PALETTES, THEMES, ICONS,
   media, openNowPlaying, closeNowPlaying, openRecents, closeRecents, sideButtons,
   get view() { return view; },

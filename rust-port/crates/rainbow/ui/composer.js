@@ -13,6 +13,32 @@
   document.body.append(form);                       // the notch reaches through the frame's bottom margin, so it lives outside the page card
   const hot = Object.assign(document.createElement('div'), { id: 'notchHot', hidden: true });
   document.body.append(hot);
+  // The rim: a few px of the page, blurred, around the notch's head and sides (the top fading out), from a snapshot.
+  const RIM = 3;
+  const rim = Object.assign(document.createElement('div'), { id: 'cpRim', hidden: true });
+  // A sharp copy of the page lies under a blurred one whose top edge fades out: where the blur ends the page itself shows,
+  // not the chrome's own background, so there is never a hard cut.
+  const rimImg = document.createElement('img'), rimSharp = document.createElement('img');
+  rimImg.alt = rimSharp.alt = ''; rimSharp.className = 'sharp';
+  const soft = Object.assign(document.createElement('div'), { className: 'soft' });
+  soft.append(rimImg);
+  rim.append(rimSharp, soft);
+  document.body.append(rim);
+  let rimReady = false;
+  async function loadRim() {
+    rimReady = false; rim.hidden = true;
+    const s = await Rainbow.pageShot?.();
+    if (!s || !armed) return;
+    const left = geo.left - RIM, top = geo.top - RIM;
+    Object.assign(rim.style, { left: left + 'px', top: top + 'px', width: geo.w + 2 * RIM + 'px', height: geo.h - FLARE + RIM + 'px' });
+    for (const im of [rimImg, rimSharp]) {
+      Object.assign(im.style, { left: s.x - left + 'px', top: s.y - top + 'px', width: s.w + 'px', height: s.h + 'px' });
+      im.src = s.data;
+    }
+    try { await rimImg.decode(); } catch { return; }
+    if (!armed) return;
+    rimReady = true; rim.hidden = false; apply();
+  }
   let armed = false, bandOn = false, p = 0, goal = 0, timer = 0, geo = null;
   const isAsk = () => !$('#ask').hidden;
   const blocked = () => Rainbow.view !== 'page' || isAsk() ||
@@ -41,11 +67,15 @@
       const y0 = Math.max(y, wipe), y1 = y + h;
       return y1 - y0 < 2 ? null : { x: R(x), y: R(y0), w: R(sw), h: R(y1 - y0), cut };
     };
-    const disc = (cx, cy) => (bottom - cy < 4 ? null : { y: R(cy), h: 1, disc: [R(cx), R(cy), NR] });
+    const rr = Math.min(NR, bottom - T);                  // a lip shorter than the corner radius rounds off with a smaller one
+    const disc = (cx, cy) => (rr < 4 ? null : { y: R(cy), h: 1, disc: [R(cx), R(cy), rr] });
     const list = [
-      strip(left + NR, T, w - 2 * NR, bottom - T),
-      strip(left, T + NR, w, bottom - T - NR),
-      disc(left + NR, T + NR), disc(left + w - NR, T + NR),
+      rimReady && p > .85 ? strip(left - RIM, top - RIM, RIM, bottom - FLARE - top + RIM) : null,
+      rimReady && p > .85 ? strip(left + w, top - RIM, RIM, bottom - FLARE - top + RIM) : null,
+      rimReady && p > .85 ? strip(left + NR, top - RIM, w - 2 * NR, RIM) : null,
+      strip(left + rr, T, w - 2 * rr, bottom - T),
+      strip(left, T + rr, w, bottom - T - rr),
+      disc(left + rr, T + rr), disc(left + w - rr, T + rr),
       p > .85 ? strip(left - f, bottom - f, f, f, [R(left - f), R(bottom - f), f]) : null,
       p > .85 ? strip(left + w, bottom - f, f, f, [R(left + w + f), R(bottom - f), f]) : null,
     ].filter(Boolean);
@@ -80,11 +110,13 @@
     if (armed) { input.focus(); return; }
     armed = true; hot.style.pointerEvents = 'none';
     go(1);
+    loadRim();
     setTimeout(() => input.focus(), 180);
   }
   function hide() {
     if (!armed) return;
     armed = false; hot.style.pointerEvents = '';
+    rimReady = false; rim.hidden = true;
     go(0);
   }
   const toggle = () => (armed ? hide() : show());
