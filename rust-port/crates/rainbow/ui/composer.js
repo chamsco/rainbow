@@ -1,59 +1,83 @@
 'use strict';
-/* The resting Ask composer: a notch at the bottom of the page that grows into the chat. The
-   page is a native view above the chrome, so the shell clips a band of chrome out over the page
-   for it; the page itself never moves. */
+/* The Ask composer: a notch that rises from the bottom edge of the page on Ctrl+E (or Ask Rainbow in a
+   menu), and sinks back when you are done. It is not there the rest of the time.
+
+   The page is a native view above the chrome, so while the notch is up the shell clips three small pieces
+   of chrome out over the page for it: the notch, and the two corner pieces beside its base, whose curved
+   edges are cut away so the live page shows through them. During the rise and the fall the strips follow
+   the notch frame by frame, so no empty square of the chrome's own background is ever drawn on the page. */
 (() => {
   const { $, send } = Rainbow;
   const form = $('#composer'), input = $('#cpInput'), model = $('#cpModel');
-  let bandOn = false, queued = 0;
+  const FLARE = 22, NR = 22, MS = 420;
+  let armed = false, bandOn = false, tracking = 0, hideTimer = 0;
   const isAsk = () => !$('#ask').hidden;
   const blocked = () => Rainbow.view !== 'page' || isAsk() ||
     !$('#panel').hidden || !$('#cmdbar').hidden || !$('#menu').hidden || !$('#menuSub').hidden ||
     !$('#shotTool').hidden || !$('#newSpace').hidden;
 
+  // The strips for the notch where it is right now, cut off at the page's bottom edge.
   function bandMessage() {
-    if (form.hidden) return null;
-    const r = form.getBoundingClientRect();
-    if (!r.height) return null;
-    // Three strips, not a whole row: the notch itself and the two corner pieces beside its base, so the
-    // page stays live and visible on either side of it.
-    const f = 22, R = Math.round;
-    return { t: 'chrome', band: [
-      { x: R(r.left), y: R(r.top), w: R(r.width), h: R(r.height) },
-      { x: R(r.left - f), y: R(r.bottom - f), w: f, h: f },
-      { x: R(r.right), y: R(r.bottom - f), w: f, h: f },
-    ] };
+    const r = form.getBoundingClientRect(), edge = $('#pageCard').getBoundingClientRect().bottom, R = Math.round, f = FLARE;
+    const strip = (x, y, w, h, cut) => (edge - y < 3 || w <= 0 || h <= 0) ? null : { x: R(x), y: R(y), w: R(w), h: R(Math.min(y + h, edge) - y), cut };
+    const disc = (cx, cy) => edge - (cy - NR) < 3 ? null : { y: R(cy), h: 1, disc: [R(cx), R(cy), NR] };
+    const top = r.bottom - f;
+    // The notch is two rectangles that leave its top corners out, and a round piece for each corner.
+    const list = [
+      strip(r.left + NR, r.top, r.width - 2 * NR, r.height),
+      strip(r.left, r.top + NR, r.width, r.height - NR),
+      disc(r.left + NR, r.top + NR), disc(r.right - NR, r.top + NR),
+      strip(r.left - f, top, f, f, [R(r.left - f), R(top), f]),
+      strip(r.right, top, f, f, [R(r.right + f), R(top), f]),
+    ].filter(Boolean);
+    return list.length ? { t: 'chrome', band: list } : null;
   }
   function sendBand() {
     const m = bandMessage();
-    if (m) send(m);
+    if (m) { bandOn = true; send(m); }
   }
-  function place() {
-    const show = !blocked();
-    const was = form.hidden;
-    form.hidden = !show;
-    if (show && (was || !bandOn)) {
-      bandOn = true;
-      sendBand();
-    } else if (!show && bandOn) {
-      bandOn = false;
-      // Ask's wash owns the band while it is open; it clears its own on close.
-      if (!isAsk()) send({ t: 'chrome', band: null });
-    } else if (show) {
-      sendBand();   // the page or the sidebar changed width
-    }
+  // While the notch moves, follow it every few milliseconds. Timers, not frames: a hidden window makes none.
+  function follow() {
+    const until = Date.now() + MS + 80;
+    clearInterval(tracking);
+    tracking = setInterval(() => { sendBand(); if (Date.now() > until) { clearInterval(tracking); tracking = 0; } }, 16);
   }
-  // Timers, not rAF: a hidden/occluded tab produces no frames, and the notch must still appear
-  // when the chat closes or the view returns.
-  const queue = () => { if (!queued) queued = setTimeout(() => { queued = 0; place(); }, 0); };
 
-  // One observer covers the resting state: any overlay or view that takes the page hides the
-  // notch, and its close brings it back.
-  const observer = new MutationObserver(queue);
+  function show() {
+    if (blocked() || armed) { if (armed) input.focus(); return; }
+    armed = true;
+    clearTimeout(hideTimer);
+    form.hidden = false;
+    form.getBoundingClientRect();           // start from where it is hidden, then rise
+    form.classList.add('show');
+    follow();
+    setTimeout(() => input.focus(), 160);
+  }
+  function hide() {
+    if (!armed) return;
+    armed = false;
+    form.classList.remove('show');
+    follow();
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      if (armed) return;
+      form.hidden = true;
+      if (bandOn) { bandOn = false; if (!isAsk()) send({ t: 'chrome', band: null }); }
+    }, MS);
+  }
+  const toggle = () => (armed ? hide() : show());
+
+  // Anything that takes the page over (a view, a menu, the chat itself) puts the notch away.
+  const observer = new MutationObserver(() => { if (armed && blocked()) hide(); });
   for (const sel of ['#ask', '#panel', '#cmdbar', '#menu', '#menuSub', '#shotTool', '#newSpace', '#canvasView', '#settingsView', '#page'])
     observer.observe($(sel), { attributes: true, attributeFilter: ['hidden', 'class'] });
-  addEventListener('resize', queue);
-  new ResizeObserver(queue).observe($('#pageCard'));
+  addEventListener('resize', () => { if (armed) sendBand(); });
+  new ResizeObserver(() => { if (armed) sendBand(); }).observe($('#pageCard'));
+  // Leaving the field (a click into the page, another window) puts it away; moving between its own buttons does not.
+  form.addEventListener('focusout', e => {
+    if (form.contains(e.relatedTarget)) return;
+    setTimeout(() => { if (armed && !form.contains(document.activeElement) && !isAsk()) hide(); }, 140);
+  });
 
   const showModel = () => {
     const text = input.value.trim();
@@ -63,22 +87,21 @@
     if (text) model.textContent = Rainbow.ask?.modelName?.() || 'Rainbow';
   };
   input.addEventListener('input', showModel);
-  input.addEventListener('focus', () => { if (Rainbow.view !== 'page') Rainbow.setView('page'); });
   input.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { input.value = ''; showModel(); input.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); input.value = ''; showModel(); hide(); }
   });
 
+  const send_ = text => { input.value = ''; showModel(); hide(); Rainbow.ask?.open(text); };
   form.onsubmit = e => {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return input.focus();
-    input.value = ''; showModel();
-    Rainbow.ask?.open(text);
+    send_(text);
   };
-  $('#cpAgent').onclick = () => { const text = input.value.trim(); input.value = ''; showModel(); Rainbow.ask?.open(text); };
-  $('#cpCanvas').onclick = () => Rainbow.setView('canvas');
-  $('#cpSettings').onclick = () => Rainbow.openSettings('look');
-  $('#cpNew').onclick = () => Rainbow.openCmd('new');
+  $('#cpAgent').onclick = () => send_(input.value.trim());
+  $('#cpCanvas').onclick = () => { hide(); Rainbow.setView('canvas'); };
+  $('#cpSettings').onclick = () => { hide(); Rainbow.openSettings('look'); };
+  $('#cpNew').onclick = () => { hide(); Rainbow.openCmd('new'); };
   // Dictation has to write into this input, not the hidden Ask input, so it has its own small
   // speech path; on Windows the shell opens the system dictation over the focused field.
   let rec = null;
@@ -96,9 +119,7 @@
     rec.onerror = e => Rainbow.toast(e.error === 'not-allowed' ? 'Microphone access was blocked.' : 'Dictation stopped.');
     $('#cpMic').classList.add('on'); rec.start();
   };
-  model.onclick = () => { const text = input.value.trim(); input.value = ''; showModel(); Rainbow.ask?.open(text); };
+  model.onclick = () => send_(input.value.trim());
 
-  // Boot: the page view and the shell band settle a beat after the scripts run.
-  for (const t of [0, 250, 900]) setTimeout(place, t);
-  Rainbow.composer = { place, get bandOn() { return bandOn; } };
+  Rainbow.composer = { show, hide, toggle, get open() { return armed; }, get bandOn() { return bandOn; } };
 })();

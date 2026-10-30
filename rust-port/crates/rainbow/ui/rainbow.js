@@ -2296,7 +2296,7 @@ function appMenu(x, y) {
     '-',
     t ? ['Split view', () => setTimeout(() => splitMenu(t.id, x, y))] : null,
     ['Canvas', () => setView('canvas'), '', 'Ctrl+Shift+K'],
-    ['Ask Rainbow', () => Rainbow.ask?.open(), '', 'Ctrl+E'],
+    ['Ask Rainbow', () => Rainbow.composer?.show(), '', 'Ctrl+E'],
     ['Library', () => Rainbow.library?.open('spaces')],
     ['History', () => Rainbow.library?.open('history')],
     ['Downloads', () => Rainbow.library?.open('downloads')],
@@ -2326,7 +2326,7 @@ function openShortcuts() { openSettings('keys'); }
 const ACTIONS = [
   ['New space', () => newSpace(), '＋'],
   ['Open Canvas', () => setView('canvas'), '▦'],
-  ['Ask Rainbow', () => Rainbow.ask?.open(), '✦'],
+  ['Ask Rainbow', () => Rainbow.composer?.show(), '✦'],
   ['Toggle sidebar', () => toggleSidebar(), '⇤'],
   ['Settings', () => openSettings(), '⚙'],
   ['Boost this site', () => openBoost(), '★'],
@@ -2555,7 +2555,7 @@ function onKey(e) {
   if (k === 's') return run(toggleSidebar);
   if (k === 'd' && e.shiftKey) return run(() => t && pinTab(t.id, !t.home));
   if (k === 'd') return run(() => t && Rainbow.canvas?.saveTab(t.id));
-  if (k === 'e') return run(() => (Rainbow.ask?.isOpen() ? Rainbow.ask.close() : Rainbow.ask?.open()));
+  if (k === 'e') return run(() => (Rainbow.ask?.isOpen() ? Rainbow.ask.close() : Rainbow.composer?.toggle()));
   if (k === 'k' && e.shiftKey) return run(() => setView(view === 'canvas' ? 'page' : 'canvas'));
   if (k === 'b') return run(openBoost);
   if (k === ',') return run(() => (view === 'settings' ? setView('page') : openSettings()));

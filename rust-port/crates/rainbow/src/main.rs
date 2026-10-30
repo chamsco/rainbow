@@ -596,7 +596,7 @@ struct App {
     /// the bar: while the bar rides the peeked sidebar it must not cover the page beside it.
     chrome_bar_w: f64,
     /// A strip of chrome drawn over the live page (Ask Rainbow's wash): (top, height) in logical px.
-    chrome_band: Vec<(f64, f64, f64, f64)>,
+    chrome_band: Vec<Band>,
     /// The peeked sidebar is on the right of the window (tabs on the right).
     chrome_right: bool,
     /// Whether the chrome is currently clipped and raised (kept so the normal path does no work).
@@ -1084,7 +1084,7 @@ impl App {
         // column is not out, because the page would otherwise cover it.
         self.chrome_bar_h = self.chrome_bar.filter(|_| !self.overlay && !self.asking).unwrap_or(0.0);
         // Ask Rainbow's wash is a band of chrome over the live page; it is on while the question is asked.
-        let band: Vec<(f64, f64, f64, f64)> = if self.overlay { Vec::new() } else { self.chrome_band.clone() };
+        let band: Vec<Band> = if self.overlay { Vec::new() } else { self.chrome_band.clone() };
         if (self.chrome_bar_h > 0.0 || !band.is_empty()) && want.is_none() {
             want = Some(0.0);
         }
@@ -1475,7 +1475,11 @@ impl App {
                 if let Some(b) = m.get("band") {
                     // One strip (x and w optional: the whole width), a list of strips, or null for none.
                     let one = |r: &Value| match (r["y"].as_f64(), r["h"].as_f64()) {
-                        (Some(y), Some(h)) if h > 0.0 => Some((r["x"].as_f64().unwrap_or(0.0).max(0.0), y.max(0.0), r["w"].as_f64().unwrap_or(0.0).max(0.0), h)),
+                        (Some(y), Some(h)) if h > 0.0 => Some(Band {
+                            x: r["x"].as_f64().unwrap_or(0.0).max(0.0), y: y.max(0.0), w: r["w"].as_f64().unwrap_or(0.0).max(0.0), h,
+                            disc: r["disc"].as_array().and_then(|c| Some((c.first()?.as_f64()?, c.get(1)?.as_f64()?, c.get(2)?.as_f64()?))),
+                            cut: r["cut"].as_array().and_then(|c| Some((c.first()?.as_f64()?, c.get(1)?.as_f64()?, c.get(2)?.as_f64()?))),
+                        }),
                         _ => None,
                     };
                     self.chrome_band = match b.as_array() {
@@ -1992,6 +1996,43 @@ fn round(wv: &WebView, size: wry::dpi::PhysicalSize<f64>, r: f64) {
 #[cfg(not(windows))]
 fn round(_: &WebView, _: wry::dpi::PhysicalSize<f64>, _: f64) {}
 
+/// A strip of chrome drawn over the live page, in logical px. `w` of 0 means the whole width. `cut` is a
+/// circle (centre x, centre y, radius) taken out of the strip, so a corner piece can have a curved edge
+/// and the page shows through the curve instead of a square of the chrome's own background.
+#[derive(Clone, Copy)]
+struct Band {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    cut: Option<(f64, f64, f64)>,
+    /// A round piece instead of a rectangle: (centre x, centre y, radius). Used for the notch's top corners.
+    disc: Option<(f64, f64, f64)>,
+}
+
+/// Add every band to a clip region.
+#[cfg(windows)]
+unsafe fn add_band(rgn: windows::Win32::Graphics::Gdi::HRGN, band: &[Band], scale: f64, win_w: i32) {
+    use windows::Win32::Graphics::Gdi::{CombineRgn, CreateEllipticRgn, CreateRectRgn, DeleteObject, RGN_DIFF, RGN_OR};
+    for b in band {
+        let (x0, x1) = ((b.x * scale).round() as i32, if b.w > 0.0 { ((b.x + b.w) * scale).round() as i32 } else { win_w });
+        if let Some((cx, cy, r)) = b.disc {
+            let d = CreateEllipticRgn(((cx - r) * scale).round() as i32, ((cy - r) * scale).round() as i32, ((cx + r) * scale).round() as i32 + 1, ((cy + r) * scale).round() as i32 + 1);
+            CombineRgn(Some(rgn), Some(rgn), Some(d), RGN_OR);
+            let _ = DeleteObject(d.into());
+            continue;
+        }
+        let piece = CreateRectRgn(x0, (b.y * scale).round() as i32, x1, ((b.y + b.h) * scale).round() as i32);
+        if let Some((cx, cy, r)) = b.cut {
+            let hole = CreateEllipticRgn(((cx - r) * scale).round() as i32, ((cy - r) * scale).round() as i32, ((cx + r) * scale).round() as i32 + 1, ((cy + r) * scale).round() as i32 + 1);
+            CombineRgn(Some(piece), Some(piece), Some(hole), RGN_DIFF);
+            let _ = DeleteObject(hole.into());
+        }
+        CombineRgn(Some(rgn), Some(rgn), Some(piece), RGN_OR);
+        let _ = DeleteObject(piece.into());
+    }
+}
+
 /// The rectangles the overlay clip is cut around, in physical px: every pane (the page keeps
 /// its own pixels there) and the sidebar column (the chrome paints over the page there).
 fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale: f64, right: bool) -> (Vec<(i32, i32, i32, i32)>, (i32, i32, i32, i32)) {
@@ -2014,7 +2055,7 @@ fn overlay_parts(win: (i32, i32), panes: &[(u64, Rect, bool)], col_w: f64, scale
 /// not painted and does not take clicks, so the page stays live underneath and the page never
 /// has to be resized. `width: None` puts the chrome back behind the pages.
 #[cfg(windows)]
-fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64, band: &[(f64, f64, f64, f64)], right: bool) {
+fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), panes: &[(u64, Rect, bool)], bar_h: f64, bar_w: f64, band: &[Band], right: bool) {
     use windows::Win32::Graphics::Gdi::{
         CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_DIFF, RGN_OR,
     };
@@ -2046,12 +2087,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
                     CombineRgn(Some(rgn), Some(rgn), Some(bar), RGN_OR);
                     let _ = DeleteObject(bar.into());
                 }
-                for &(bx, y, bwd, bh) in band {
-                    let (x0, x1) = ((bx * scale).round() as i32, if bwd > 0.0 { ((bx + bwd) * scale).round() as i32 } else { w });
-                    let b = CreateRectRgn(x0, (y * scale).round() as i32, x1, ((y + bh) * scale).round() as i32);
-                    CombineRgn(Some(rgn), Some(rgn), Some(b), RGN_OR);
-                    let _ = DeleteObject(b.into());
-                }
+                add_band(rgn, band, scale, w);
                 SetWindowRgn(h, Some(rgn), true);
                 let _ = SetWindowPos(h, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 return;
@@ -2074,12 +2110,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
         CombineRgn(Some(rgn), Some(rgn), Some(column), RGN_OR);
         let _ = DeleteObject(column.into());
         // ...plus Ask Rainbow's band, which is drawn over the live page.
-        for &(bx, y, bwd, bh) in band {
-            let (x0, x1) = ((bx * scale).round() as i32, if bwd > 0.0 { ((bx + bwd) * scale).round() as i32 } else { w });
-            let b = CreateRectRgn(x0, (y * scale).round() as i32, x1, ((y + bh) * scale).round() as i32);
-            CombineRgn(Some(rgn), Some(rgn), Some(b), RGN_OR);
-            let _ = DeleteObject(b.into());
-        }
+        add_band(rgn, band, scale, w);
         // ...plus the compact bar's strip, for the same reason.
         if bar_h > 0.0 {
             let bar = CreateRectRgn(0, 0, bw, (bar_h * scale).round() as i32);
@@ -2094,7 +2125,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
 // ponytail: on macOS the page webview is an NSView above the chrome's, so the same clip needs
 // `addSubview:positioned:`. The CSS overlay still works there, the page just covers it.
 #[cfg(not(windows))]
-fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: &[(f64, f64, f64, f64)], _: bool) {}
+fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: &[Band], _: bool) {}
 
 /// Start Windows voice typing (Win+H) into whatever has focus: Ask Rainbow's input.
 #[cfg(windows)]

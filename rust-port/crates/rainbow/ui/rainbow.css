@@ -1362,3 +1362,17 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .composer input::placeholder { color: var(--ink-3); }
 .cp-send { background: var(--ink); color: var(--a); }
 .cp-send[hidden], .cp-tool[hidden] { display: none; }
+
+/* ---------- the notch rises and sinks; it is the shell's own colour ---------- */
+/* One fixed gradient, the same as the frame behind it, with no highlight laid over it: the notch and the
+   frame under the page read as one piece. Hidden by default; it rises from the bottom edge and sinks back. */
+.composer {
+  background: var(--space-grad); background-attachment: fixed;
+  transform: translateY(calc(100% + 6px)); opacity: 0; visibility: hidden;
+  transition: transform .42s var(--ease), opacity .24s var(--ease), visibility 0s linear .42s;
+}
+.composer.show { transform: none; opacity: 1; visibility: visible; transition: transform .42s var(--ease), opacity .24s var(--ease), visibility 0s; }
+/* Where the shell clips the page for the corner pieces, the curve is cut by the clip itself; a mask here
+   would leave a dark fringe of the chrome's own background along it. */
+:root[data-os="windows"] .composer::before, :root[data-os="windows"] .composer::after { -webkit-mask: none; mask: none; }
+@media (prefers-reduced-motion: reduce) { .composer, .composer.show { transition: opacity .15s linear; transform: none; } }
