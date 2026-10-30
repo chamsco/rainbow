@@ -1030,6 +1030,50 @@ impl App {
         }
     }
 
+    /// The page is a window above the chrome, so the chrome never hears the pointer over it. The bottom
+    /// notch's hover hint needs it, so a thread reads the cursor and tells the chrome where it is while it
+    /// is over this window's bottom edge, and once more when it leaves.
+    #[cfg(windows)]
+    fn watch_cursor(&self) {
+        use windows::Win32::Foundation::{HWND, POINT, RECT};
+        use windows::Win32::Graphics::Gdi::ScreenToClient;
+        use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GetClientRect, GetCursorPos, WindowFromPoint, GA_ROOT};
+        use wry::WebViewExtWindows as _;
+        let (Some(c), Some(w)) = (&self.chrome, &self.window) else { return };
+        let (hwnd, scale) = (c.hwnd().0 as isize, w.scale_factor());
+        let proxy = self.proxy.clone();
+        std::thread::spawn(move || {
+            let h = HWND(hwnd as *mut _);
+            let mut last: Option<(i32, i32, bool)> = None;
+            loop {
+                std::thread::sleep(Duration::from_millis(40));
+                let mut pt = POINT::default();
+                let mut r = RECT::default();
+                let (x, y, on) = unsafe {
+                    if GetCursorPos(&mut pt).is_err() || GetClientRect(h, &mut r).is_err() {
+                        continue;
+                    }
+                    let over = WindowFromPoint(pt);
+                    let ours = !over.0.is_null() && GetAncestor(over, GA_ROOT) == GetAncestor(h, GA_ROOT);
+                    let _ = ScreenToClient(h, &mut pt);
+                    let near = pt.x >= 0 && pt.x < r.right && pt.y >= 0 && pt.y < r.bottom && r.bottom - pt.y <= (260.0 * scale) as i32;
+                    ((pt.x as f64 / scale).round() as i32, (pt.y as f64 / scale).round() as i32, ours && near)
+                };
+                // Only the bottom edge matters; everywhere else it is one "away" message.
+                let now = if on { (x / 4, y / 4, true) } else { (0, 0, false) };
+                if last == Some(now) {
+                    continue;
+                }
+                last = Some(now);
+                if proxy.send_event(UserEvent::ToChrome(json!({"t": "cursor", "x": x, "y": y, "on": on}))).is_err() {
+                    return;
+                }
+            }
+        });
+    }
+    #[cfg(not(windows))]
+    fn watch_cursor(&self) {}
+
     fn place(&mut self) {
         let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor());
         // While the window edge is being dragged, rebuilding a rounded window region for
@@ -1615,6 +1659,7 @@ impl ApplicationHandler<UserEvent> for App {
             });
         }
         self.start_bench();
+        self.watch_cursor();
         // RAINBOW_SHOT=<png>: render the chrome once and exit. The window is a WebView2 surface, so
         // a screen or PrintWindow capture of it comes back black; this asks WebView2 itself, which
         // is the only way to see whether the chrome paints on a machine with no visible desktop.

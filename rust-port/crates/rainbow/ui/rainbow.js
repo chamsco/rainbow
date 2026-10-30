@@ -388,6 +388,7 @@ function recv(m) {
       break;
     }
     case 'ctx': pageContextMenu(m); break;
+    case 'cursor': Rainbow.composer?.cursor(m); break;
     case 'newtab': openTab(m.url, { focus: false }); surfaceToast('Opened in a new tab'); break;
     case 'key': onKey({ key: m.key, ctrlKey: true, shiftKey: m.shift, altKey: false, metaKey: false, preventDefault() {} }); break;
     case 'snapshot': { const r = shots.get(m.id); shots.delete(m.id); r?.(m.data); break; }
@@ -1136,7 +1137,24 @@ function fitSide() {
   root.style.setProperty('--side-w', (st.layout === 'rail' ? 58 : Math.min(st.sideWidth, sideCap())) + 'px');
   // The Essentials row follows the width it is given.
   setEssCols(state.essentials.length || 1);
+  if (typeof sideFit === 'function') requestAnimationFrame(sideFit);
 }
+/* The address bar's room is measured, not inherited: the sidebar's own width, read whenever it changes, keeps the top bar's
+   columns exact while the sidebar is dragged (an inherited custom property left them one step behind). */
+function sideFit() {
+  const app = $('#app');
+  const fit = app.classList.contains('collapsed') ? 0 : Math.round($('#sidebar').getBoundingClientRect().width);
+  root.style.setProperty('--side-fit', fit + 'px');
+  // On Windows the bar's three columns are set here too: the address takes what the sidebar leaves.
+  const tb = $('#topbar'), st = state.settings;
+  const cols = root.dataset.os === 'windows' && (st.layout === 'sidebar' || st.layout === 'rail')
+    ? (st.side === 'right' ? `minmax(130px, 1fr) minmax(150px, 620px) ${fit + 110}px` : `${fit + 110}px minmax(150px, 620px) minmax(130px, 1fr)`) : '';
+  if (tb.style.gridTemplateColumns !== cols) tb.style.gridTemplateColumns = cols;
+  alignNav();
+}
+new ResizeObserver(sideFit).observe($('#sidebar'));
+new MutationObserver(sideFit).observe($('#app'), { attributes: true, attributeFilter: ['class'] });
+new MutationObserver(sideFit).observe(root, { attributes: true, attributeFilter: ['data-layout', 'data-side', 'data-os'] });
 let fitQueued = 0;
 addEventListener('resize', () => { if (!fitQueued) fitQueued = requestAnimationFrame(() => { fitQueued = 0; fitSide(); }); });
 
@@ -2221,18 +2239,16 @@ function openSettings(section = 'look') {
     nav.replaceChildren(...SETTINGS_SECTIONS.map(([id, name]) => h('button', { class: id === section ? 'on' : '', 'aria-current': id === section ? 'page' : null,
       onclick: () => { section = id; draw(); } }, name)));
     body.replaceChildren(...[].concat(pages[section]()).flat());
-    const current = SETTINGS_SECTIONS.find(x => x[0] === section);
-    title.textContent = current ? current[1] : 'Settings';
   }
   const title = h('h1', { class: 'set-title' }, 'Settings');
-  const back = { innerHTML: '<svg viewBox="0 0 16 16"><path d="M9.5 3.5 5 8l4.5 4.5"/></svg>' };
   const cross = { innerHTML: '<svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg>' };
+  // Two cards side by side, neither resizable: the sections on the left, the chosen section on the right.
   host.replaceChildren(h('div', { class: 'set-shell' },
-    h('header', { class: 'set-top' },
-      h('button', { class: 'icon-btn', 'aria-label': 'Back to the page', title: 'Back to the page', onclick: closeSettings, ...back }),
-      title,
-      h('button', { class: 'icon-btn', 'aria-label': 'Close settings', title: 'Close settings', onclick: closeSettings, ...cross })),
-    h('div', { class: 'set-page' }, nav, body)));
+    h('aside', { class: 'set-left' },
+      h('header', { class: 'set-top' }, title,
+        h('button', { class: 'icon-btn', 'aria-label': 'Close settings', title: 'Close settings', onclick: closeSettings, ...cross })),
+      nav),
+    body));
   draw();
   setView('settings');
   host.scrollTop = 0;
@@ -2630,9 +2646,22 @@ function sidebarOverlay(on, w, force) {
 // cross the panel on the way to the page all the time — and the panel fades out instead of
 // vanishing in one frame.
 const PEEK_LEAVE = 420, PEEK_FADE = 260;   // PEEK_FADE matches --motion in the CSS
+let shrinkTimer = 0;
 function keepPeek() {
   clearTimeout(peekOut); clearTimeout(peekGone);
+  if (shrinkTimer) { clearInterval(shrinkTimer); shrinkTimer = 0; sidebarOverlay(true, peekW(), true); }
   $('#app').classList.remove('peek-out');
+}
+/* Leaving natively: the sidebar slides out and the clip narrows with its edge, a little ahead of it, so no
+   strip of the chrome's own dark page card is ever drawn where the sidebar was. */
+function shrinkPeek(ms) {
+  const from = peekW(), t0 = performance.now();
+  clearInterval(shrinkTimer);
+  shrinkTimer = setInterval(() => {
+    const t = Math.min(1, (performance.now() - t0) / ms + .1), left = (1 - t) ** 4;
+    if (t >= 1 || from * left < 12) { clearInterval(shrinkTimer); shrinkTimer = 0; return; }
+    sidebarOverlay(true, Math.round(from * left) + 8, true);
+  }, 12);
 }
 const openPeekSidebar = () => {
   clearTimeout(peekOut);
@@ -2657,6 +2686,7 @@ const closePeekSidebar = (delay = PEEK_LEAVE) => {
     const app = $('#app');
     if (!app.classList.contains('peek') || app.classList.contains('peek-out') || overlayOpen()) return;
     app.classList.add('peek-out');
+    if (NATIVE) shrinkPeek(PEEK_FADE);
     peekGone = setTimeout(() => {
       app.classList.remove('peek', 'peek-out');
       sidebarOverlay(false);

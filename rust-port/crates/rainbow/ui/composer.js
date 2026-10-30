@@ -9,7 +9,7 @@
 (() => {
   const { $, send } = Rainbow;
   const form = $('#composer'), input = $('#cpInput'), model = $('#cpModel');
-  const FLARE = 22, NR = 22, LIP = .32;
+  const FLARE = 22, NR = 22, LIP = .26;
   document.body.append(form);                       // the notch reaches through the frame's bottom margin, so it lives outside the page card
   const hot = Object.assign(document.createElement('div'), { id: 'notchHot', hidden: true });
   document.body.append(hot);
@@ -36,15 +36,16 @@
   // notch can never disagree about what is there. The page shows through everywhere else.
   function bandMessage(wipe) {
     const { left, w, top, bottom } = geo, R = Math.round, f = FLARE;
+    const T = Math.max(top, wipe);                        // the notch's visible top: round corners ride the wipe line
     const strip = (x, y, sw, h, cut) => {
       const y0 = Math.max(y, wipe), y1 = y + h;
       return y1 - y0 < 2 ? null : { x: R(x), y: R(y0), w: R(sw), h: R(y1 - y0), cut };
     };
-    const disc = (cx, cy) => wipe > top + NR ? null : { y: R(cy), h: 1, disc: [R(cx), R(cy), NR] };
+    const disc = (cx, cy) => (bottom - cy < 4 ? null : { y: R(cy), h: 1, disc: [R(cx), R(cy), NR] });
     const list = [
-      strip(left + NR, top, w - 2 * NR, bottom - top),
-      strip(left, top + NR, w, bottom - top - NR),
-      disc(left + NR, top + NR), disc(left + w - NR, top + NR),
+      strip(left + NR, T, w - 2 * NR, bottom - T),
+      strip(left, T + NR, w, bottom - T - NR),
+      disc(left + NR, T + NR), disc(left + w - NR, T + NR),
       p > .85 ? strip(left - f, bottom - f, f, f, [R(left - f), R(bottom - f), f]) : null,
       p > .85 ? strip(left + w, bottom - f, f, f, [R(left + w + f), R(bottom - f), f]) : null,
     ].filter(Boolean);
@@ -88,11 +89,19 @@
   }
   const toggle = () => (armed ? hide() : show());
 
-  // The lip: hovering the frame's bottom edge under the notch lets the top of it out, and a click opens it.
-  hot.addEventListener('pointerenter', () => { if (!armed && !blocked()) go(LIP); });
-  hot.addEventListener('pointerleave', () => { if (!armed) go(0); });
+  // The lip: the pointer anywhere near the notch's spot along the bottom lets the top of it out; a click opens it.
+  // The page is a native window that hides the pointer from the chrome, so the shell reports where it is.
+  function cursor(m) {
+    if (armed) return;
+    const near = m.on && geo && m.x > geo.left - 70 && m.x < geo.left + geo.w + 70 && m.y > innerHeight - 110 && !blocked();
+    if (near && goal === 0) go(LIP);
+    else if (!near && goal === LIP) go(0);
+  }
   hot.addEventListener('click', show);
-  const syncHot = () => { hot.hidden = armed ? true : blocked(); if (!hot.hidden && p === 0) measure(); };
+  form.addEventListener('click', () => { if (!armed) show(); });
+  // Anywhere outside the notch puts it away (a click on the page is a focus change; see below).
+  document.addEventListener('pointerdown', e => { if (armed && !form.contains(e.target)) hide(); });
+  const syncHot = () => { hot.hidden = armed ? true : blocked(); if (!armed && !blocked() && p === 0) measure(); };
   setInterval(syncHot, 300);
 
   // Anything that takes the page over (a view, a menu, the chat itself) puts the notch away.
@@ -150,5 +159,5 @@
   };
   model.onclick = () => send_(input.value.trim());
 
-  Rainbow.composer = { show, hide, toggle, get open() { return armed; }, get bandOn() { return bandOn; } };
+  Rainbow.composer = { show, hide, toggle, cursor, get open() { return armed; }, get bandOn() { return bandOn; } };
 })();

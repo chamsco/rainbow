@@ -677,10 +677,10 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-layout="toolbar"] .sidebar { grid-row: 1 / 3; }
 :root[data-layout="toolbar"] .topbar {
   grid-column: 1 / -1; grid-row: 1; display: grid; align-items: center; gap: 8px; padding: 0;
-  padding-left: var(--side-cur); transition: padding-left .24s var(--ease);
+  padding-left: var(--side-fit, var(--side-cur)); transition: padding-left .24s var(--ease);
   grid-template-columns: minmax(190px, 1fr) minmax(260px, 620px) minmax(190px, 1fr);
 }
-:root[data-layout="toolbar"][data-side="right"] .topbar { padding-left: 0; padding-right: var(--side-cur); transition: padding-right .24s var(--ease); }
+:root[data-layout="toolbar"][data-side="right"] .topbar { padding-left: 0; padding-right: var(--side-fit, var(--side-cur)); transition: padding-right .24s var(--ease); }
 :root[data-layout="toolbar"] .topbar .nav { padding-left: 8px; }
 :root[data-layout="toolbar"] .topbar .url-pill { width: 100%; max-width: none; margin: 0; height: 32px; min-width: 0; }
 :root[data-layout="toolbar"] .topbar .win-controls { justify-self: end; align-self: stretch; }
@@ -713,8 +713,8 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 :root[data-layout="compact"] .cbar { display: flex; }
 /* The sidebar owns the left of the window while it is out, so the bar starts after it and never
    covers it. */
-:root[data-layout="compact"] .cbar { left: var(--side-cur, 0px); padding-left: 8px; }
-:root[data-layout="compact"][data-side="right"] .cbar { left: 0; right: var(--side-cur, 0px); padding-left: 8px; padding-right: 8px; }
+:root[data-layout="compact"] .cbar { left: var(--side-fit, var(--side-cur, 0px)); padding-left: 8px; }
+:root[data-layout="compact"][data-side="right"] .cbar { left: 0; right: var(--side-fit, var(--side-cur, 0px)); padding-left: 8px; padding-right: 8px; }
 :root[data-layout="compact"] .topbar, :root[data-layout="compact"] .sidebar-resizer { display: none; }
 :root[data-layout="compact"] .side-top { display: none; }
 /* With the sidebar deployed in compact, the bar stays over the page column so the sidebar's
@@ -1238,9 +1238,9 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 /* The address bar adapts: when the sidebar is wide the address slides right and narrows, down to a
    floor, rather than the sidebar stopping at it. */
 :root[data-os="windows"][data-layout="sidebar"] .topbar, :root[data-os="windows"][data-layout="rail"] .topbar {
-  grid-template-columns: minmax(calc(var(--side-cur) + 110px), 1fr) minmax(150px, 620px) minmax(130px, 1fr);
+  grid-template-columns: minmax(calc(var(--side-fit, var(--side-cur)) + 110px), 1fr) minmax(150px, 620px) minmax(130px, 1fr);
 }
-:root[data-os="windows"][data-layout="sidebar"][data-side="right"] .topbar { grid-template-columns: minmax(130px, 1fr) minmax(150px, 620px) minmax(calc(var(--side-cur) + 110px), 1fr); }
+:root[data-os="windows"][data-layout="sidebar"][data-side="right"] .topbar { grid-template-columns: minmax(130px, 1fr) minmax(150px, 620px) minmax(calc(var(--side-fit, var(--side-cur)) + 110px), 1fr); }
 #splitBtn.on { background: var(--active); color: var(--ink); }
 #splitBtn svg { width: 16px; height: 16px; }
 
@@ -1406,3 +1406,33 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 #notchHot { position: fixed; bottom: 4px; z-index: 41; height: 4px; cursor: pointer; }
 #notchHot[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { .composer { transition: none; } }
+
+/* In the app the retreating sidebar slides out with the shell's clip narrowing at its edge; fading it would leave the
+   clip drawing the page card's dark colour where it was. */
+:root[data-native] .app.peek-out .sidebar { opacity: 1; transform: translateX(calc(-100% - var(--inset))); transition: transform var(--motion) var(--ease); }
+:root[data-native][data-side="right"] .app.peek-out .sidebar { transform: translateX(calc(100% + var(--inset))); }
+
+/* Caption glyphs, bigger: the glyph is 18 px in a 54 x 38 target. */
+:root[data-os="windows"] .wc { width: 54px; height: 38px; }
+:root[data-os="windows"] .wc svg { width: 18px; height: 18px; stroke-width: 1.15; }
+
+/* Room above the notch's content so the lip that peeks out on hover shows plain colour, never half a button. */
+.composer { padding-top: 12px; }
+
+/* Settings as two fixed cards on the frame's own tint: the sections on the left, the section on the right. */
+.settings-view { background: color-mix(in oklab, var(--ink) 10%, #fff); }
+:root[data-mode="dark"] .settings-view { background: #0e1012; }
+.settings-view .set-shell { flex-direction: row; padding: 8px; gap: 8px; }
+.set-left { width: 250px; flex: none; display: flex; flex-direction: column; min-height: 0; border-radius: var(--radius); background: var(--settings-bg); }
+.set-left .set-top { height: 52px; padding: 0 12px 0 18px; border-bottom: 0; }
+.set-left .set-title { font-size: 15px; }
+.settings-view .set-left .set-nav { width: auto; flex: 1; min-height: 0; padding: 4px 10px 12px; border-right: 0; }
+.settings-view .set-body { border-radius: var(--radius); background: var(--settings-bg); padding: 26px 32px 32px; }
+@media (max-width: 720px) {
+  .settings-view .set-shell { flex-direction: column; }
+  .set-left { width: auto; }
+  .settings-view .set-left .set-nav { flex: none; flex-direction: row; overflow-x: auto; }
+}
+
+/* The menu button is a small rainbow, in its own colours. */
+.rb-ic { width: 18px; height: 18px; } .rb-ic path { stroke-width: 1.9; stroke-linecap: round; }
