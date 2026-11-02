@@ -9,16 +9,19 @@ along with the replay buttons that used to live in Settings → Data.
    Collapsed, Compact). Each choice applies live behind the card.
 2. **Bring your things.** Import tabs, bookmarks and history from the browsers it finds on the machine; skip is one click.
 3. **Profile and first space.** Name the first space, pick its colours, say whether this is the personal profile or a new one.
-4. **Ask Rainbow.** Three honest choices: built-in commands (no setup), your own API key, or a small model that runs on this
-   machine (a one-time download, shown with its size).
+4. **Local model.** Nothing to set up to start: Windows' own OCR reads the text out of captures, and the Sorter (about 23 MB,
+   one download) files each Trove card under a topic once installed. The keyword scorer sorts cards until then.
 5. **Make it the default browser** (Windows settings page opens; nothing is changed silently).
 
 Each step is skippable and re-reachable from Settings. The steps are not built yet; the app opens straight into the shell.
 
-## The on-device model
+## The local model
 
-Canvas sorting and the built-in assistant should share one small model that runs locally. The call is already in place:
-`Rainbow.canvas.classify(card)` asks `Rainbow.localModel.classify` when a model is installed and falls back to a keyword scorer
-otherwise. What is left is choosing and shipping the model: a sentence-embedding model (about 20–90 MB) is enough for
-sorting; the assistant wants a small instruction-tuned model (a few hundred MB, quantised). Both can run through one native
-runtime inside the shell, downloaded on first use rather than bundled.
+OCR and classification both run on this machine. Windows reads the text out of a capture itself (offline, no model); the
+Sorter, a small sentence-embedding model of about 23 MB, is downloaded once on first use and picks the topic of each
+Trove card. Nothing is uploaded, and a topic chosen by hand is never overwritten.
+
+The call is already in place: `Rainbow.trove.classify(card)` asks `Rainbow.localModel.classify` when the Sorter is
+installed and falls back to a keyword scorer otherwise. Install it, or remove it again, in Settings → Local model.
+The assistant chat and the Decider model are shelved for now; the code is parked in
+`rust-port/crates/rainbow/ui/.shelved/` and can come back.

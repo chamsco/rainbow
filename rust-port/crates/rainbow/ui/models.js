@@ -1,24 +1,21 @@
 'use strict';
-/* On-device models. Two small models, used apart or together, both running on this machine:
+/* The one local model, running on this machine:
 
-     Sorter   a sentence-embedding model. It reads a card and says which topic it sits closest to.
-     Decider  a small instruction model that makes one decision at a time ("which of these?"), the shape the
-              page agent in jev.js uses.
+     Sorter   a sentence-embedding model. It reads a Trove card and says which topic it sits closest to.
 
-   "Both" is the fusion: the Sorter answers when it is sure; when two topics are close it hands the decision to
-   the Decider, with just those candidates. Neither is installed by default. Installing downloads the model once
-   from its public host into this browser's cache; after that every decision is made locally.
+   Screenshots are read by Windows' own OCR and the Sorter classifies the text locally, so nothing is
+   uploaded. The model is not installed by default: installing downloads it once from its public host into
+   this browser's cache, and after that every classification is made here.
 
-   `Rainbow.localModel.classify(card)` is the one call the Canvas makes. It answers null when nothing is installed,
-   and the Canvas falls back to its keyword scorer. */
+   `Rainbow.localModel.classify(card)` is the one call the Trove makes. It answers null when nothing is
+   installed, and the Trove falls back to its keyword scorer. */
 (() => {
   const { h } = Rainbow;
   const RUNTIME = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/+esm';
   const MODELS = {
-    sorter: { id: 'sorter', name: 'Sorter', role: 'Files Canvas cards under the right topic', repo: 'Xenova/all-MiniLM-L6-v2', task: 'feature-extraction', size: '~23 MB', opts: { dtype: 'q8' } },
-    decider: { id: 'decider', name: 'Decider', role: 'Makes one small decision at a time, for sorting and for the assistant', repo: 'onnx-community/Qwen2.5-0.5B-Instruct', task: 'text-generation', size: '~400 MB', opts: { dtype: 'q4' } },
+    sorter: { id: 'sorter', name: 'Sorter', role: 'Files Trove cards under the right topic', repo: 'Xenova/all-MiniLM-L6-v2', task: 'feature-extraction', size: '~23 MB', opts: { dtype: 'q8' } },
   };
-  const st = Rainbow.state.models ||= { mode: 'both', installed: {} };
+  const st = Rainbow.state.models ||= { installed: {} };
   const pipes = {}, status = {};   // loaded pipelines; 'idle' | 'loading' | 'ready' | 'error'
   let lib = null;
 
@@ -38,8 +35,7 @@
     status[id] = 'loading'; m.progress = 0; emit();
     try {
       const { pipeline } = await runtime();
-      const device = id === 'decider' && navigator.gpu ? 'webgpu' : 'wasm';
-      pipes[id] = await pipeline(m.task, m.repo, { ...m.opts, device,
+      pipes[id] = await pipeline(m.task, m.repo, { ...m.opts, device: 'wasm',
         progress_callback: p => { if (p.status === 'progress' && p.total) { m.progress = Math.round(p.loaded / p.total * 100); emit(); } } });
       st.installed[id] = true; status[id] = 'ready'; Rainbow.save();
     } catch (e) {
@@ -59,13 +55,12 @@
     await install(id);
     return pipes[id] || null;
   }
-  const on = id => (st.mode === 'both' || st.mode === id) && st.installed[id];
 
   /* ---- the Sorter: nearest topic by meaning ---- */
   let protos = null;   // topic name -> unit vector
-  const unit = v => { const n = Math.hypot(...v) || 1; return v.map(x => x / n); };
   async function embed(text) {
     const p = await ready('sorter');
+    if (!p) return null;
     const out = await p(String(text).slice(0, 600), { pooling: 'mean', normalize: true });
     return Array.from(out.data);
   }
@@ -78,47 +73,21 @@
   async function nearest(card, topics) {
     const protosNow = await prototypes(topics);
     const v = await embed(`${card.title || ''} ${card.text || ''} ${card.url ? new URL(card.url, 'https://x').hostname : ''}`);
+    if (!v) return [];
     // Meaning first; a few exact keyword hits nudge it, so "useEffect" never lands under Music.
     const words = new Set(`${card.title || ''} ${card.text || ''}`.toLowerCase().split(/[^a-z0-9]+/));
-    return Object.entries(protosNow).map(([topic, p]) => ({ topic, score: dot(v, p) + .04 * Math.min(3, topics[topic].filter(k => words.has(k)).length) })).sort((a, b) => b.score - a.score);
+    return Object.entries(protosNow).filter(([, p]) => p).map(([topic, p]) => ({ topic, score: dot(v, p) + .04 * Math.min(3, topics[topic].filter(k => words.has(k)).length) })).sort((a, b) => b.score - a.score);
   }
 
-  /* ---- the Decider: one choice among a few ---- */
-  async function decide({ question, options }) {
-    const p = await ready('decider');
-    if (!p) return null;
-    // A small model is steadier naming an option than numbering it: it is asked for the word, and the
-    // reply is matched back to the options.
-    const msgs = [
-      { role: 'system', content: 'You make one decision. Reply with exactly one of the allowed words and nothing else.' },
-      { role: 'user', content: `${question}
-Allowed words: ${options.join(', ')}.
-Reply:` },
-    ];
-    const out = await p(msgs, { max_new_tokens: 6, do_sample: false });
-    const text = String(out[0]?.generated_text?.at?.(-1)?.content ?? out[0]?.generated_text ?? '').toLowerCase();
-    let best = null, at = 1e9;
-    for (const o of options) { const i = text.indexOf(String(o).toLowerCase()); if (i >= 0 && i < at) { at = i; best = o; } }
-    return best;
-  }
-
-  /* ---- what the Canvas calls ---- */
+  /* ---- what the Trove calls ---- */
   async function classify(card) {
-    const topics = Rainbow.canvas?.topicWords?.();
-    if (!topics || st.mode === 'off') return null;
-    const names = Object.keys(topics), q = `${card.title || ''}. ${String(card.text || '').slice(0, 300)} (${card.url || ''})`;
-    if (on('sorter')) {
-      const ranked = await nearest(card, topics);
-      const [a, b] = ranked;
-      const sure = !b || a.score - b.score >= .06;
-      if (sure || !on('decider')) return a.topic;
-      return (await decide({ question: `Which topic fits this best?\n${q}`, options: ranked.slice(0, 3).map(r => r.topic) })) || a.topic;
-    }
-    if (on('decider')) return await decide({ question: `Which topic fits this best?\n${q}`, options: names });
-    return null;
+    const topics = Rainbow.trove?.topicWords?.();
+    if (!topics || !st.installed.sorter) return null;
+    const ranked = await nearest(card, topics);
+    return ranked[0]?.topic ?? null;
   }
 
-  Rainbow.localModel = { classify, decide, install, remove, MODELS, status: id => status[id] || (st.installed[id] ? 'installed' : 'idle') };
+  Rainbow.localModel = { classify, install, remove, MODELS, status: id => status[id] || (st.installed[id] ? 'installed' : 'idle') };
   Rainbow.modelsPage = () => {
     const row = m => {
       const s = Rainbow.localModel.status(m.id);
@@ -132,7 +101,6 @@ Reply:` },
           ? h('button', { class: 'btn', onclick: () => remove(m.id) }, 'Remove')
           : h('button', { class: 'btn primary', disabled: s === 'loading', onclick: () => install(m.id) }, 'Install'));
     };
-    return [Object.values(MODELS).map(row), st.mode];
+    return Object.values(MODELS).map(row);
   };
-  Rainbow.setModelMode = mode => { st.mode = mode; Rainbow.save(); emit(); };
 })();

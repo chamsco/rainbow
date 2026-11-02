@@ -1,0 +1,4 @@
+// Windows resource script for Rainbow's executable icon: Explorer, the taskbar pin and the
+// Start-menu entry all read the icon from the PE resources, not from the window at runtime.
+// build.rs compiles this with windres (or rc.exe) and links the resulting COFF object.
+IDI_ICON1 ICON "rainbow.ico"

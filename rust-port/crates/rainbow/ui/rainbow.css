@@ -357,7 +357,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .cmd-foot span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmd-foot kbd { background: color-mix(in oklab, var(--glass-ink) 8%, transparent); border-color: transparent; }
 
-/* Ask Rainbow: a fifth of the window tall, low on the screen, everything else blurred away. */
+/* Shelved chat panel: a fifth of the window tall, low on the screen, everything else blurred away. */
 .ask {
   position: fixed; z-index: 50; left: 50%; bottom: 9vh; transform: translateX(-50%);
   width: min(760px, calc(100vw - 48px)); height: 20vh; min-height: 168px; max-height: 260px;
@@ -575,7 +575,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .split-divider.col::after { left: 50%; top: 3px; width: 36px; height: 2px; margin: 0 0 0 -18px; }
 .split-divider:hover::after { opacity: 1; }
 
-/* Ask Rainbow blurs only a band along the bottom; the page above stays live. The blur is a
+/* The chat panel blurs only a band along the bottom; the page above stays live. The blur is a
    pool, not a rectangle: one radial mask fades it out on the top and both sides, so it
    dissolves into the page the way the chrome's own gradient does. */
 .veil.low {
@@ -1051,7 +1051,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .nsp[data-ink="light"] .nsp-foot .btn.ghost:hover { background: rgba(0,0,0,.3); }
 .nsp-hero { display: flex; flex-direction: column; align-items: center; position: relative; }
 
-/* Library forms (new prompt, new routine) */
+/* Library forms (kept; unused since the editing sections were shelved) */
 .lib-form { display: flex; flex-direction: column; gap: 8px; padding: 2px; }
 .lib-form input, .lib-form textarea, .lib-form select { border: 0; outline: 0; border-radius: 8px; padding: 7px 9px; font-size: 13px; background: color-mix(in oklab, var(--ink) 8%, transparent); color: var(--ink); resize: vertical; }
 .lib-form input:focus, .lib-form textarea:focus, .lib-form select:focus { box-shadow: 0 0 0 2px color-mix(in oklab, var(--ink) 25%, transparent); }
@@ -1168,8 +1168,8 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 
 
 /* ---------- round 9 ---------- */
-/* Hovering Canvas: a blurred, faded wash across the bottom of the sidebar. It covers the spaces row
-   and thins out towards the top; the Canvas button stays above it. */
+/* Hovering Trove: a blurred, faded wash across the bottom of the sidebar. It covers the spaces row
+   and thins out towards the top; the Trove button stays above it. */
 #arcPop.side-pop {
   width: auto; padding: 14px 10px 56px; border-radius: 0; gap: 4px; box-shadow: none; transform-origin: 50% 100%;
   background: linear-gradient(to top, color-mix(in oklab, var(--glass) 94%, transparent) 38%, color-mix(in oklab, var(--glass) 55%, transparent) 78%, transparent);
@@ -1178,9 +1178,9 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
   animation: arc-wash .45s var(--ease);
 }
 @keyframes arc-wash { from { opacity: 0; } }
-#canvasBtn { position: relative; z-index: 47; }
+#troveBtn { position: relative; z-index: 47; }
 
-/* The spaces row: the pair of icons sits in the middle of the space between Canvas and the + button. */
+/* The spaces row: the pair of icons sits in the middle of the space between Trove and the + button. */
 .space-dots { gap: 6px; }
 .dot { width: 24px; height: 24px; }
 
@@ -1214,7 +1214,9 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .cb-left { gap: 2px; }
 @container (max-width: 210px) { .cbar .cb-right > #cbNewTab { display: none; } }
 
-/* Ask Rainbow fades out as softly as it comes in; so does the Canvas wash. */
+/* The chat panel fades out as softly as it comes in; so does the Trove wash. */
+/* Shelved: the .ask/.composer styles below are kept for when the chat UI returns
+   (see ui/.shelved/README.md); nothing mounts them for now. */
 .ask.out { animation: ask-out .3s var(--ease) forwards; pointer-events: none; }
 @keyframes ask-out { to { opacity: 0; transform: translateX(-50%) translateY(10px); } }
 .veil.low { animation: veil-in .45s var(--ease); }
@@ -1261,7 +1263,7 @@ kbd { font: 11px var(--sans); padding: 1px 5px; border-radius: 4px; background: 
 .cmdbar li .k { font-size: 10.5px; }
 .cmd-foot { padding: 7px 16px 8px; font-size: 11px; }
 
-/* Ask Rainbow's wash: sharp page below, blurred page above it fading in towards the bottom, never a second
+/* Ask's wash: sharp page below, blurred page above it fading in towards the bottom, never a second
    section of the window. */
 .veil.low { left: 0; right: 0; bottom: auto; background: none; overflow: hidden; -webkit-mask-image: none; mask-image: none; animation: none; }
 .veil.low::after { display: none; }

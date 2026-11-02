@@ -4,6 +4,21 @@ The plan for what comes next, including what Rainbow can learn from Zephium, is 
 
 `[x]` done and checked in the app · `[~]` done in part · `[ ]` open
 
+## Shelved for now
+
+The assistant chat and everything built around it are out of the UI for now. The code is parked, not deleted, in
+`rust-port/crates/rainbow/ui/.shelved/`, and the plans still stand if it comes back. What was built and is now
+hidden:
+
+- Ask Rainbow: the floating chat, model picker, Chat mode, dictation, the blurred overlay and wash, and the
+  built-in commands (site searches and more) that acted in the browser.
+- Prompts and routines: their editors, the routines that ran at start or daily, and their pages in the Library.
+- The Decider model, the Sorter/Decider "Both" fusion, and the API-key settings.
+- Step 4 of first run ("Ask Rainbow": built-in commands, your own key, or on-device models).
+
+What ships instead: Windows' own OCR reads the text out of captures, and one local Sorter model files each Trove
+card under a topic (see Capture and Trove below).
+
 ## Sidebar, tabs and spaces
 - [x] Sidebar tabs: Essentials (global), pinned tabs with nested folders, Today tabs that tidy away
 - [x] Spaces with their own theme; a space belongs to a profile with its own logins
@@ -17,7 +32,7 @@ The plan for what comes next, including what Rainbow can learn from Zephium, is 
 - [x] One sidebar row per split, with a vertical line between the two names
 - [x] Settings button removed from the sidebar bottom (it lives in the space's three-dot menu)
 - [x] Spaces icons centred in the bottom row
-- [x] Canvas hover: a blurred, fading wash over the bottom of the sidebar that hides the spaces row
+- [x] Trove hover: a blurred, fading wash over the bottom of the sidebar that hides the spaces row
 - [x] Tabs overview (a panel; reachable from the space menu and the space icon's right-click)
 
 ## Top bar and windows
@@ -44,37 +59,29 @@ The plan for what comes next, including what Rainbow can learn from Zephium, is 
 - [x] Smaller bar; open-tab rows say "Switch to Tab"
 - [x] Gmail and other icons come from the site itself
 
-## Ask Rainbow
-- [x] Floating chat with model picker, Chat mode, dictation
-- [x] Overlay with a blurred wash fading in and out; the page stays live
-- [x] Built-in commands do what was asked (site searches and more), window closes 6 s after a finished request
-- [ ] The assistant acting through the Decider model (needs the model installed; see On-device models)
-
 ## Capture
-- [x] Screenshot/region capture saved to Canvas first, then read with Windows' own OCR (offline, no model)
-- [x] OCR text is kept on the card, searchable in Canvas and fed to the topic classifier
+- [x] Screenshot/region capture saved to Trove first, then read with Windows' own OCR (offline, no model)
+- [x] OCR text is kept on the card, searchable in Trove and fed to the local Sorter's topic classification
 - [x] A topic chosen by hand is never overwritten by classification
-- [ ] Read text out of images saved with right-click (needs a fetch-to-canvas step) and off full-page saves
+- [x] The Sorter: a ~23 MB sentence-embedding model, installed once from Settings; files each card under a topic
+- [ ] Read text out of images saved with right-click (needs a fetch-to-Trove step) and off full-page saves
 - [ ] Capture the page around a selection, not only the visible pane
 
-## Canvas
+## Trove
 - [x] Infinite board of cards; Discover (mood and subject); Recently discovered
-- [x] Right-click an image or selected text on a page: Save to Canvas
-- [x] Cards sorted into topics by one function (`Rainbow.canvas.classify`)
+- [x] Right-click an image or selected text on a page: Save to Trove
+- [x] Cards sorted into topics by one function (`Rainbow.trove.classify`)
 - [x] Captured images are written to `%LOCALAPPDATA%\Rainbow\media` and served locally; cards keep a short URL, so screenshots no longer fill the store
-- [x] On-device models: Sorter and Decider, used apart or together (fusion); installable from Settings
-- [ ] Choose the long-term default after some real use (both are in; compare by usage)
 - [ ] Download the saved image instead of linking it
 
 ## Library
-- [x] Spaces, Canvas, History, Boosts, Downloads, Prompts, Routines, Archive
-- [x] Routines run at start or daily while Rainbow is open
+- [x] Spaces, Trove, History, Boosts, Downloads, Archive
 
 ## Menus and surfaces
 - [x] A transparent surface above every page for menus, the site options panel and notices
 - [x] One frosted glass, tint, radius and border for every context menu
 - [x] Notices (e.g. "Opened in a new tab") are solid and sit at the top right
-- [ ] Move the command bar and Ask Rainbow's input onto the surface (they draw correctly today)
+- [ ] Move the command bar onto the surface (it draws correctly today)
 
 ## Extensions and profiles
 - [x] Extensions load per profile; pin them next to the address bar
@@ -86,7 +93,7 @@ The plan for what comes next, including what Rainbow can learn from Zephium, is 
 - [ ] Step 1: Look (light or dark, tabs left or right, layout)
 - [ ] Step 2: Bring your things (import from other browsers)
 - [ ] Step 3: Profile and first space
-- [ ] Step 4: Ask Rainbow (built-in, your own key, or on-device models)
+- [ ] Step 4: Local model (install the ~23 MB Sorter, or keep the keyword sorter)
 - [ ] Step 5: Make Rainbow the default browser
 
 ## Shipping
@@ -96,12 +103,13 @@ The plan for what comes next, including what Rainbow can learn from Zephium, is 
 - [ ] Automated tests for the native behaviour (focus, clipping, split, downloads)
 
 ## From the roadmap (see roadmap.md)
-- [ ] Assistant composer docked in the page frame; page radius equal to the app frame's
-- [ ] Tasks panel (plain-words capture, Today / Tomorrow / Upcoming, linked to the page, undo, "Make tasks")
+- [ ] Page radius equal to the app frame's
+- [ ] Shelved — assistant composer docked in the page frame
+- [ ] Tasks panel (plain-words capture, Today / Tomorrow / Upcoming, linked to the page, undo)
 - [ ] Native ad and tracker blocker (engine, lists with updates, cosmetic hiding, "hide with a click", per-site pause)
-- [ ] Routines with runs, grants and approvals; routines kept separate from tasks
-- [ ] Work canvas: run nodes, helpers with live previews, plan to tasks
-- [ ] Skills, memory, provider keys in the system keychain
+- [ ] Shelved — routines with runs, grants and approvals
+- [ ] Shelved — work board: run nodes, helpers with live previews, plan to tasks
+- [ ] Shelved — skills and memory, keys in the system keychain
 - [ ] Inactive tab sleep; global launcher; new tab with time and tasks; time and focus; notes beside the page
 - [ ] macOS: top bar and navigation as liquid glass
 - [ ] Linux: decide the web engine

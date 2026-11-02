@@ -1,8 +1,8 @@
 'use strict';
 /* Rainbow chrome: spaces, pinned/today tabs, global Essentials, command bar, boosts,
    settings. The page itself lives in the native shell (one webview per tab); in a plain
-   browser (for UI work) tabs fall back to iframes. canvas.js and agent.js build on the
-   `Rainbow` object exported at the bottom. */
+   browser (for UI work) tabs fall back to iframes. trove.js, library.js and models.js build on
+   the `Rainbow` object exported at the bottom. */
 
 const $ = (s, r = document) => r.querySelector(s);
 const h = (tag, props = {}, ...kids) => {
@@ -95,7 +95,7 @@ function seed() {
     bookmarks: [], edges: [], history: [], archive: [], boosts: {},
     settings: {
       mode: 'auto', side: 'left', density: 'comfortable', grain: true, radius: 8, inset: 8, blur: 4, layout: 'sidebar', compact: 'off',
-      sideWidth: 248, compactPeek: .5, archiveHours: 12, search: 'google', model: 'claude-opus-5-5', apiKey: '', autoPip: true,
+      sideWidth: 248, compactPeek: .5, archiveHours: 12, search: 'google', autoPip: true,
     },
   };
 }
@@ -104,6 +104,10 @@ let state;
 try { state = JSON.parse(localStorage.getItem(KEY)); } catch { state = null; }
 if (!state || state.v !== 1) state = seed();
 state.settings = { ...seed().settings, ...state.settings };
+// The assistant is shelved: drop the API key and model choice an older build may have kept.
+const hadAssistantSettings = 'apiKey' in state.settings || 'model' in state.settings;
+delete state.settings.apiKey;
+delete state.settings.model;
 // Older stores may carry a radius rounder than the window frame; the page follows the frame.
 if (state.settings.radius > 8) state.settings.radius = 8;
 for (const k of ['bookmarks', 'edges', 'history', 'archive', 'downloads']) state[k] ||= [];
@@ -118,7 +122,7 @@ let saveTimer = 0;
 function save() {
   clearTimeout(saveTimer);
   // ponytail: one JSON blob in the chrome's localStorage; move to files via IPC
-  // when the canvas holds thousands of screenshots.
+  // when the trove holds thousands of screenshots.
   saveTimer = setTimeout(flush, 150);
 }
 /* Write now. A debounced save never runs if the window goes away inside those 150 ms, which
@@ -126,8 +130,10 @@ function save() {
 function flush() {
   clearTimeout(saveTimer);
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
-  catch { toast('Storage is full: remove some Canvas screenshots'); }
+  catch { toast('Storage is full: remove some Trove screenshots'); }
 }
+// A key stored by an older build is scrubbed from disk once, not only from memory.
+if (hadAssistantSettings) flush();
 
 // Windows ships with the compact title bar (address in the middle, caption buttons at the
 // right). Existing installs move once; the setting after that is the user's.
@@ -144,7 +150,7 @@ const closed = [];            // for Ctrl+Shift+T: groups of tabs, newest last
 const selected = new Set();   // tab ids picked with Ctrl/Shift+click
 let selAnchor = 0;
 let shownTab = null;          // what the page card shows right now
-let view = 'page';            // 'page' | 'canvas'
+let view = 'page';            // 'page' | 'trove' | 'settings'
 
 const space = () => state.spaces.find(s => s.id === state.activeSpace) || state.spaces[0];
 const tab = id => state.tabs[id];
@@ -217,7 +223,7 @@ function favicon(url, size = 16) {
 
 const frames = {};
 /* The browser stand-in has no page pixels to give, so it paints a stand-in page: enough for the
-   overlay blur, the screenshot tool and the Canvas to be exercised outside the shell. */
+   overlay blur, the screenshot tool and the Trove to be exercised outside the shell. */
 function standInPage(times = 1) {
   const r = $('#page').getBoundingClientRect();
   const c = h('canvas', { width: Math.max(2, Math.round(r.width)), height: Math.max(2, Math.round(r.height * times)) });
@@ -406,7 +412,7 @@ function titleFromFrame(t) {
 }
 function remember(t) {
   if (!/^https?:/.test(t.url)) return;
-  if (state.history[0]?.url !== t.url) Rainbow.canvas?.touch(t.url);
+  if (state.history[0]?.url !== t.url) Rainbow.trove?.touch(t.url);
   state.history = [{ url: t.url, title: t.title, t: Date.now() }, ...state.history.filter(x => x.url !== t.url)].slice(0, 1000);
 }
 
@@ -438,16 +444,16 @@ function syncPage() {
   // area stays black and the shell's "chrome never spoke" reload fires for nothing.
   setTimeout(run, 60);
 }
-/* A right-click on an image or a selection inside a page: Save to Canvas and the few things that go with it. */
+/* A right-click on an image or a selection inside a page: Save to Trove and the few things that go with it. */
 function pageContextMenu(m) {
   const c = m.ctx, p = panes.find(q => q.id === m.id);
   if (!c || !p) return;
   const items = c.kind === 'image' ? [
-    ['Save image to Canvas', () => Rainbow.canvas?.capture(c)],
+    ['Save image to Trove', () => Rainbow.trove?.capture(c)],
     ['Open image in new tab', () => openTab(c.src)],
     ['Copy image address', () => copyText(c.src, 'Address copied')],
   ] : [
-    ['Save to Canvas', () => Rainbow.canvas?.capture(c)],
+    ['Save to Trove', () => Rainbow.trove?.capture(c)],
     ['Copy', () => copyText(c.text, 'Copied')],
     [`Search the web for “${c.text.slice(0, 22)}${c.text.length > 22 ? '…' : ''}”`, () => openTab(SEARCH[state.settings.search] + encodeURIComponent(c.text.slice(0, 200)))],
   ];
@@ -1445,8 +1451,8 @@ function render() {
   $('#linkOpts').disabled = !t;
   $('#saveBtn').classList.toggle('on', !!(t && state.bookmarks.some(b => b.url === t.url)));
   $('#saveBtn').disabled = !t;   // with no tab there is nothing to save; say so by dimming
-  $('#saveBtn').title = !t ? 'Save to Canvas'
-    : (state.bookmarks.some(b => b.url === t.url) ? 'Already on your Canvas' : 'Save to Canvas');
+  $('#saveBtn').title = !t ? 'Save to Trove'
+    : (state.bookmarks.some(b => b.url === t.url) ? 'Already in your Trove' : 'Save to Trove');
 
   // essentials: a dotted zone when empty, so the row still says what it is for
   setEssCols(state.essentials.length || 1);
@@ -1458,7 +1464,7 @@ function render() {
       onclick: () => openEssential(e),
       oncontextmenu: ev => { ev.preventDefault(); menu(ev.clientX, ev.clientY, [
         ['Open', () => openEssential(e)], ['Copy link', () => copyText(e.url, 'Link copied')],
-        ['Save to Canvas', () => Rainbow.canvas?.saveUrl(e.url, e.title)], '-',
+        ['Save to Trove', () => Rainbow.trove?.saveUrl(e.url, e.title)], '-',
         ['Move to tabs', () => essToTab(e.id)],
         ['Remove from Essentials', () => removeEssential(e.id), 'danger']]); },
     }, favicon(e.url, 20));
@@ -1476,7 +1482,7 @@ function render() {
     title: x.name, onclick: () => switchSpace(x.id), dataset: { space: x.id },
     oncontextmenu: e => { e.preventDefault(); spaceMenu(x, e.clientX, e.clientY); },
   }, x.id === s.id ? x.icon : h('i'))));
-  $('#canvasBtn').classList.toggle('on', view === 'canvas');
+  $('#troveBtn').classList.toggle('on', view === 'trove');
   $('#splitBtn').classList.toggle('on', !!s.split);
   sideButtons();
 }
@@ -1659,7 +1665,7 @@ function multiMenu(x, y) {
   menu(x, y, [
     [`Close ${n} tabs`, () => closeTabs(ids), 'danger'],
     [`Pin ${n} tabs`, () => { for (const id of ids) if (!tab(id).home && !tab(id).ess) pinTab(id, true); selected.clear(); render(); }],
-    [`Save ${n} tabs to Canvas`, () => { for (const id of ids) Rainbow.canvas?.saveTab(id); selected.clear(); render(); }],
+    [`Save ${n} tabs to Trove`, () => { for (const id of ids) Rainbow.trove?.saveTab(id); selected.clear(); render(); }],
     ...state.spaces.filter(s => s.id !== state.activeSpace).map(s => [`Move to ${s.icon} ${s.name}`, () => { for (const id of ids) moveTabToSpace(id, s.id); selected.clear(); render(); }]),
     '-',
     ['Clear selection', () => { selected.clear(); paintSel(); }],
@@ -1670,7 +1676,7 @@ function tabMenu(t, x, y) {
   menu(x, y, [
     [pinned ? 'Unpin' : 'Pin tab', () => pinTab(t.id, !pinned), '', 'Ctrl+Shift+D'],
     ['Add to Essentials', () => { const from = document.querySelector(`.tab[data-id="${t.id}"]`)?.getBoundingClientRect(), made = addEssential(t.url, t.title); if (made) flipFrom(from, `.essential[data-id="${made.id}"]`); }],
-    ['Save to Canvas', () => Rainbow.canvas?.saveTab(t.id), '', 'Ctrl+D'],
+    ['Save to Trove', () => Rainbow.trove?.saveTab(t.id), '', 'Ctrl+D'],
     ['Rename', () => { const li = document.querySelector(`.tab[data-id="${t.id}"]`); if (li) rename(li, t); }],
     ['Copy link', () => copyText(t.url, 'Link copied')],
     ['Duplicate', () => openTab(t.url)],
@@ -1824,7 +1830,7 @@ function linkMenu(x, y) {
     ['Copy as Markdown', () => copyText(`[${t.custom || t.title || t.url}](${t.url})`, 'Markdown copied')],
     '-',
     ['Add to Essentials', () => addEssential(t.url, t.title)],
-    ['Save to Canvas', () => Rainbow.canvas?.saveTab(t.id), '', 'Ctrl+D'],
+    ['Save to Trove', () => Rainbow.trove?.saveTab(t.id), '', 'Ctrl+D'],
     s.split ? null : ['Open in split view', () => { const nt = openTab(t.url, { focus: false }); if (nt) splitWith(t.id, nt.id, 'right'); }],
     '-',
     ['Boost this site', openBoost, state.boosts[hostOf(t.url)]?.on ? 'check' : ''],
@@ -1997,12 +2003,12 @@ async function shotSave(data) {
   if (!data) return toast('Could not capture the image');
   const t = activeTab();
   // Saved first, read and sorted after: the screenshot must survive even when OCR is unavailable.
-  const b = Rainbow.canvas?.add({ kind: 'image', image: data, title: t ? (t.custom || t.title || hostOf(t.url)) : 'Screenshot',
+  const b = Rainbow.trove?.add({ kind: 'image', image: data, title: t ? (t.custom || t.title || hostOf(t.url)) : 'Screenshot',
     url: t?.url || null, sourceUrl: t?.url || null, created: Date.now() });
   closeShotTool();
   if (!b) return;
-  toast('Screenshot saved to Canvas');
-  Rainbow.canvas?.enrich?.(b.id, data);
+  toast('Screenshot saved to Trove');
+  Rainbow.trove?.enrich?.(b.id, data);
 }
 /* Stored shots are capped: a full page at full size is megabytes of localStorage. */
 function fitShot(src, max = 1400) {
@@ -2076,7 +2082,7 @@ function toast(text) {
 
 /* Overlays: the page is a native view the chrome cannot draw over or blur, so take a
    snapshot of it, hide it, and blur the snapshot instead. */
-/* 'low' (Ask Rainbow) blurs only a band along the bottom of the window: the page above it
+/* 'low' blurs only a band along the bottom of the window: the page above it
    stays live and is shortened to end where the band starts. */
 let overlayDepth = 0, veilMode = 'full';
 let veilHide = 0;
@@ -2097,7 +2103,7 @@ async function veilOn(mode = 'full') {
   veil.hidden = false;
   send({ t: 'overlay', on: true });
 }
-/* Ask Rainbow's wash. The page stays live and keeps its size. The chrome is lifted over a band along the
+/* The low wash. The page stays live and keeps its size. The chrome is lifted over a band along the
    bottom of the window, and there it draws a sharp picture of the page (so the seam cannot be seen)
    with a blurred copy fading in over it, thicker towards the bottom. */
 async function washOn(veil) {
@@ -2122,7 +2128,7 @@ function veilOff() {
   overlayDepth = 0;
   const v = $('#veil');
   if (veilMode === 'low') {
-    // The wash dissolves with the chat; only then does the shell stop drawing the band.
+    // The wash dissolves with the overlay; only then does the shell stop drawing the band.
     send({ t: 'overlay', on: false, low: true });
     if (v.hidden) { send({ t: 'chrome', band: null }); return; }
     v.classList.add('out');
@@ -2180,7 +2186,7 @@ function openSpaceSettings(s = space()) {
 
 /* Settings is a page with a left rail of sections, with its own left rail. */
 const SETTINGS_SECTIONS = [['general', 'General'], ['look', 'Look and Feel'], ['tabs', 'Tabs and browsing'], ['profiles', 'Spaces and profiles'], ['mods', 'Extensions and themes'],
-  ['ask', 'Ask Rainbow'], ['models', 'On-device models'], ['keys', 'Keyboard shortcuts'], ['data', 'Data']];
+  ['models', 'Local model'], ['keys', 'Keyboard shortcuts'], ['data', 'Data']];
 const heading = t => h('h3', { class: 'set-h' }, t);
 function openSettings(section = 'general') {
   const st = state.settings;
@@ -2317,20 +2323,13 @@ function openSettings(section = 'general') {
         h('p', { class: 'hint' }, 'Per-site styling and scripts live in Boosts: press the star in the address bar.'),
       ];
     },
-    ask: () => [
-      heading('Ask Rainbow'),
-      field('Anthropic API key', h('input', { type: 'password', value: st.apiKey, placeholder: 'sk-ant-…', autocomplete: 'off', oninput: e => { st.apiKey = e.target.value.trim(); save(); } })),
-      h('p', { class: 'hint' }, 'Ask Rainbow opens with Ctrl+E. The key is kept on this device and sent only to api.anthropic.com. Without a key, the built-in model still runs simple commands.'),
-    ],
     models: () => {
       Rainbow.onModels = () => { if (section === 'models') draw(); };
-      const [rows, mode] = Rainbow.modelsPage();
+      const rows = Rainbow.modelsPage();
       return [
-        heading('On-device models'),
-        h('p', { class: 'hint' }, 'Small models that run on this machine to sort your Canvas and to make quick decisions for Ask Rainbow. Installing downloads a model once from its public host; every decision after that stays here.'),
-        field('Use', seg([['both', 'Both together'], ['sorter', 'Sorter'], ['decider', 'Decider'], ['off', 'Off']], mode, v => { Rainbow.setModelMode(v); })),
+        heading('Local model'),
+        h('p', { class: 'hint' }, 'One small model runs on this machine: it files Trove cards under the right topic. Screenshots are read by Windows’ own OCR and the classification happens here, so nothing is uploaded. Installing downloads the model once; after that every decision stays on this device.'),
         ...rows,
-        h('p', { class: 'hint' }, 'Together, the Sorter answers when it is sure and hands close calls to the Decider.'),
       ];
     },
     keys: () => [heading('Keyboard shortcuts'), ...shortcutRows()],
@@ -2362,7 +2361,9 @@ function openSettings(section = 'general') {
 }
 
 function exportData() {
-  const copy = { ...state, settings: { ...state.settings, apiKey: '' } };
+  // The assistant is shelved: never put an old API key or model choice in an export.
+  const { apiKey, model, ...settings } = state.settings;
+  const copy = { ...state, settings };
   const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(copy, null, 1)], { type: 'application/json' })), download: 'rainbow-export.json' });
   a.click();
 }
@@ -2372,7 +2373,7 @@ function importData() {
     try {
       const next = JSON.parse(await input.files[0].text());
       if (next.v !== 1 || !Array.isArray(next.spaces)) throw new Error('not a Rainbow export');
-      next.settings.apiKey = state.settings.apiKey;
+      if (next.settings) { delete next.settings.apiKey; delete next.settings.model; }   // the assistant is shelved
       for (const id of live) send({ t: 'close', id });
       live.clear();
       state = next;
@@ -2420,8 +2421,7 @@ function appMenu(x, y) {
     ['Reopen closed tab', reopenClosed, '', 'Ctrl+Shift+T'],
     '-',
     t ? ['Split view', () => setTimeout(() => splitMenu(t.id, x, y))] : null,
-    ['Canvas', () => setView('canvas'), '', 'Ctrl+Shift+K'],
-    ['Ask Rainbow', () => Rainbow.composer?.show(), '', 'Ctrl+E'],
+    ['Trove', () => setView('trove'), '', 'Ctrl+Shift+K'],
     ['Library', () => Rainbow.library?.open('spaces')],
     ['History', () => Rainbow.library?.open('history')],
     ['Downloads', () => Rainbow.library?.open('downloads')],
@@ -2439,8 +2439,8 @@ function appMenu(x, y) {
 }
 function shortcutRows() {
   const rows = [['Shift+Click', 'Peek a link'], ['Ctrl+T', 'New tab or search'], ['Ctrl+L', 'Edit address'], ['Ctrl+W', 'Close tab'], ['Ctrl+Shift+T', 'Reopen closed tab'],
-    ['Ctrl+Tab', 'Next tab'], ['Ctrl+1…9', 'Go to space'], ['Ctrl+S', 'Show or hide sidebar'], ['Ctrl+D', 'Save to Canvas'],
-    ['Ctrl+Shift+D', 'Pin or unpin'], ['Ctrl+Shift+K', 'Canvas'], ['Ctrl+E', 'Ask Rainbow'], ['Ctrl+B', 'Boost this site'],
+    ['Ctrl+Tab', 'Next tab'], ['Ctrl+1…9', 'Go to space'], ['Ctrl+S', 'Show or hide sidebar'], ['Ctrl+D', 'Save to Trove'],
+    ['Ctrl+Shift+D', 'Pin or unpin'], ['Ctrl+Shift+K', 'Trove'], ['Ctrl+B', 'Boost this site'],
     ['Ctrl+[ / ]', 'Back / forward'], ['Ctrl+R', 'Reload'], ['Ctrl+,', 'Settings']];
   return rows.map(([k, d]) => h('div', { class: 'field' }, h('span', {}, d), h('kbd', {}, k)));
 }
@@ -2450,13 +2450,12 @@ function openShortcuts() { openSettings('keys'); }
 
 const ACTIONS = [
   ['New space', () => newSpace(), '＋'],
-  ['Open Canvas', () => setView('canvas'), '▦'],
-  ['Ask Rainbow', () => Rainbow.composer?.show(), '✦'],
+  ['Open Trove', () => setView('trove'), '▦'],
   ['Toggle sidebar', () => toggleSidebar(), '⇤'],
   ['Settings', () => openSettings(), '⚙'],
   ['Boost this site', () => openBoost(), '★'],
   ['Pin or unpin this tab', () => activeTab() && pinTab(activeTab().id, !activeTab().home), '📌'],
-  ['Save this page to Canvas', () => Rainbow.canvas?.saveTab(space().active), '🔖'],
+  ['Save this page to Trove', () => Rainbow.trove?.saveTab(space().active), '🔖'],
   ['Clear Today tabs', () => clearToday(), '✕'],
   ['Reopen closed tab', () => reopenClosed(), '↺'],
   ['Home', () => goHome(), '⌂'],
@@ -2582,7 +2581,6 @@ function cmdUpdate() {
     }
   }
   for (const [label, run, glyph] of ACTIONS) if (!scope && (q ? match(label) : items.length < 9)) items.push({ kind: 'cmd', glyph, label, meta: 'Command', run });
-  if (q && !scope && /^ask\b|\?$/.test(q)) items.splice(1, 0, { kind: 'ask', glyph: '✦', label: `Ask Rainbow: ${text}`, meta: 'Ctrl+E', run: () => Rainbow.ask?.open(text.replace(/^ask\s*/i, '')) });
   cmdItems = items.slice(0, 12); cmdSel = 0;
   $('#cmdResults').replaceChildren(...cmdItems.map((it, i) => h('li', {
     class: (i === cmdSel ? 'sel ' : '') + 'k-' + it.kind, role: 'option', 'aria-selected': String(i === cmdSel),
@@ -2622,11 +2620,11 @@ $('#cmdInput').addEventListener('keydown', e => {
 
 function setView(v) {
   view = v;
-  $('#canvasView').hidden = v !== 'canvas';
+  $('#troveView').hidden = v !== 'trove';
   $('#settingsView').hidden = v !== 'settings';
   $('#page').hidden = v !== 'page';
   syncPage();
-  if (v === 'canvas') Rainbow.canvas?.show(); else Rainbow.canvas?.hide?.();
+  if (v === 'trove') Rainbow.trove?.show(); else Rainbow.trove?.hide?.();
   render();
 }
 function toggleSidebar() {
@@ -2655,7 +2653,7 @@ $('#app').addEventListener('transitionend', syncPage);
 
 function closeAll() {
   closeMenu(); closeCmd(); closePanel(); closeNewSpace(); closeSitePop(); closeShotTool();
-  Rainbow.ask?.close(); closeNowPlaying(); closeRecents();
+  closeNowPlaying(); closeRecents();
   // Settings is a view in the page frame, not an overlay: Escape and the other overlays must
   // still be able to leave it.
   if (view === 'settings') setView('page');
@@ -2681,9 +2679,8 @@ function onKey(e) {
   if (k === 's' && e.shiftKey) return run(openShotTool);
   if (k === 's') return run(toggleSidebar);
   if (k === 'd' && e.shiftKey) return run(() => t && pinTab(t.id, !t.home));
-  if (k === 'd') return run(() => t && Rainbow.canvas?.saveTab(t.id));
-  if (k === 'e') return run(() => (Rainbow.ask?.isOpen() ? Rainbow.ask.close() : Rainbow.composer?.toggle()));
-  if (k === 'k' && e.shiftKey) return run(() => setView(view === 'canvas' ? 'page' : 'canvas'));
+  if (k === 'd') return run(() => t && Rainbow.trove?.saveTab(t.id));
+  if (k === 'k' && e.shiftKey) return run(() => setView(view === 'trove' ? 'page' : 'trove'));
   if (k === 'b') return run(openBoost);
   if (k === ',') return run(() => (view === 'settings' ? setView('page') : openSettings()));
   if (k === '[' && t) return run(() => send({ t: 'exec', id: t.id, js: 'history.back()' }));
@@ -2724,8 +2721,8 @@ $('#reload').onclick = () => activeTab() && send({ t: 'exec', id: activeTab().id
 $('#newSpaceBtn').onclick = e => newItemMenu(e.currentTarget);
 $('#spaceName').onclick = e => spaceMenu(space(), e.clientX, e.clientY + 8);
 $('#spaceMenuBtn').onclick = e => spaceMenu(space(), e.clientX, e.clientY + 8);
-$('#saveBtn').onclick = () => activeTab() && Rainbow.canvas?.saveTab(activeTab().id);
-$('#canvasBtn').onclick = () => { closeRecents(); setView(view === 'canvas' ? 'page' : 'canvas'); };
+$('#saveBtn').onclick = () => activeTab() && Rainbow.trove?.saveTab(activeTab().id);
+$('#troveBtn').onclick = () => { closeRecents(); setView(view === 'trove' ? 'page' : 'trove'); };
 $('#panelClose').onclick = closePanel;
 $('#veil').onclick = closeAll;
 
@@ -2786,7 +2783,7 @@ const openPeekSidebar = () => {
   sidebarOverlay(true, peekW());
   cbarMsg();   // the bar rides the sidebar out, so its strip follows
 };
-const overlayOpen = () => !!surfMenu || !$('#menu').hidden || !$('#cmdbar').hidden || !$('#panel').hidden || !$('#ask').hidden;
+const overlayOpen = () => !!surfMenu || !$('#menu').hidden || !$('#cmdbar').hidden || !$('#panel').hidden;
 const closePeekSidebar = (delay = PEEK_LEAVE) => {
   clearTimeout(peekOut);
   // The create panel *is* the sidebar while it is open: it owns the peek, and typing in the
@@ -2904,7 +2901,7 @@ document.addEventListener('contextmenu', e => {
   frameMenu(e.clientX, e.clientY);
 });
 
-/* drag and drop: reorder, pin by dropping in Pinned, Essentials, other spaces, Canvas */
+/* drag and drop: reorder, pin by dropping in Pinned, Essentials, other spaces, Trove */
 const ESS_MAX = 12;
 /* How many tiles fit across the sidebar at its current width: four when there is room, three in
    the middle, two when it is squeezed. The count is recomputed by fitSide() as the sidebar is
@@ -3018,8 +3015,8 @@ $('#spaceDots').addEventListener('drop', e => {
   const dot = e.target.closest('.dot'), id = +e.dataTransfer.getData('rainbow/tab');
   if (dot && id) { e.preventDefault(); moveTabToSpace(id, +dot.dataset.space); toast('Moved'); }
 });
-$('#canvasBtn').addEventListener('dragover', e => e.preventDefault());
-$('#canvasBtn').addEventListener('drop', e => { e.preventDefault(); const id = +e.dataTransfer.getData('rainbow/tab'); if (id) Rainbow.canvas?.saveTab(id); });
+$('#troveBtn').addEventListener('dragover', e => e.preventDefault());
+$('#troveBtn').addEventListener('drop', e => { e.preventDefault(); const id = +e.dataTransfer.getData('rainbow/tab'); if (id) Rainbow.trove?.saveTab(id); });
 
 // Drag the gap between split panes to resize them.
 $('#splitDivider').addEventListener('pointerdown', e => {
@@ -3197,7 +3194,7 @@ function openRecents() {
   clearTimeout(arcHide); pop.classList.remove('out');
   pop.hidden = false;
   arcOpen = true;
-  placeSidePop(pop, $('#canvasBtn'));
+  placeSidePop(pop, $('#troveBtn'));
   // It is a wash over the bottom of the sidebar, covering the spaces row, not a card beside the button.
   const sb = $('.sidebar').getBoundingClientRect();
   Object.assign(pop.style, { left: sb.left + 'px', width: sb.width + 'px', bottom: Math.max(0, innerHeight - sb.bottom) + 'px' });
@@ -3344,7 +3341,7 @@ function drawArchive() {
   const pop = $('#arcPop');
   pop.replaceChildren();
   if (root.dataset.layout === 'rail') return false;
-  // Files first, canvas saves second, then the three newest of either.
+  // Files first, Trove saves second, then the three newest of either.
   const files = state.downloads.map(d => ({
     kind: 'file', t: d.t || 0, path: d.path, url: d.url,
     name: (d.path || d.url || '').split(/[\\/]/).pop() || 'Download',
@@ -3365,13 +3362,13 @@ function drawArchive() {
       class: 'arc-item', style: `--i:${i}`,
       onclick: () => {
         closeRecents();
-        if (it.kind === 'card') setView('canvas');
+        if (it.kind === 'card') setView('trove');
         else if (it.path) Rainbow.library?.open('downloads');
         else if (it.url) openTab(it.url);
       },
     }, thumb, h('div', { class: 'arc-text' },
       h('div', { class: 'arc-name' }, it.name),
-      h('div', { class: 'arc-sub' }, it.sub || (it.kind === 'card' ? 'Canvas' : 'Download')))));
+      h('div', { class: 'arc-sub' }, it.sub || (it.kind === 'card' ? 'Trove' : 'Download')))));
   });
   return true;
 }
@@ -3389,7 +3386,7 @@ function drawArchive() {
   });
 }
 {
-  const b = $('#canvasBtn'), p = $('#arcPop');
+  const b = $('#troveBtn'), p = $('#arcPop');
   b.addEventListener('pointerenter', openRecents);
   b.addEventListener('pointerleave', () => {
     clearTimeout(arcTimer);
@@ -3404,7 +3401,7 @@ function drawArchive() {
   });
 }
 document.addEventListener('pointerdown', e => {
-  if (arcOpen && !e.target.closest('#arcPop, #canvasBtn')) closeRecents();
+  if (arcOpen && !e.target.closest('#arcPop, #troveBtn')) closeRecents();
 }, true);
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (npOpen) closeNowPlaying(); if (arcOpen) closeRecents(); }

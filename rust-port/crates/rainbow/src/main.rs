@@ -1,4 +1,4 @@
-//! Rainbow's native shell. The chrome (sidebar, command bar, Ask Rainbow, Canvas) is the
+//! Rainbow's native shell. The chrome (sidebar, command bar, Trove) is the
 //! HTML app in `ui/`, loaded into one full-window webview. Each tab's page is its own
 //! child webview, placed in the rectangle the chrome reports. The two sides talk over
 //! a small JSON protocol: the chrome sends `{t: ...}` messages through `window.ipc`,
@@ -181,7 +181,7 @@ addEventListener('keydown', function (e) {
   addEventListener('load', icon);
 })();
 addEventListener('contextmenu', function (e) {
-  // A right-click on an image or a selection offers Save to Canvas; the page says what and where.
+  // A right-click on an image or a selection offers Save to Trove; the page says what and where.
   if (e.shiftKey || e.defaultPrevented) return;
   var sel = String(getSelection() || '').trim();
   var img = e.target.closest && e.target.closest('img');
@@ -580,10 +580,10 @@ struct App {
     active: Option<u64>,
     /// Page corner radius in logical px.
     radius: f64,
-    /// While an overlay (Ask Rainbow, command bar) is up, the page is hidden and the chrome
+    /// While an overlay (the shelved assistant, command bar) is up, the page is hidden and the chrome
     /// shows a blurred snapshot of it instead: a native child can't be blurred by CSS.
     overlay: bool,
-    /// Ask Rainbow's bottom band is up: pages stay visible, but the chrome keeps keyboard focus.
+    /// The shelved assistant's bottom band is up: pages stay visible, but the chrome keeps keyboard focus.
     asking: bool,
     /// The chrome is drawn over the page, clipped to the sidebar column: the width of that
     /// column in logical px while the collapsed sidebar or the grown rail is showing.
@@ -595,7 +595,7 @@ struct App {
     /// The bar's width in logical px, or 0 for the whole window. The strip is only as wide as
     /// the bar: while the bar rides the peeked sidebar it must not cover the page beside it.
     chrome_bar_w: f64,
-    /// A strip of chrome drawn over the live page (Ask Rainbow's wash): (top, height) in logical px.
+    /// A strip of chrome drawn over the live page (the shelved assistant's wash): (top, height) in logical px.
     chrome_band: Vec<Band>,
     /// The peeked sidebar is on the right of the window (tabs on the right).
     chrome_right: bool,
@@ -647,7 +647,7 @@ fn rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
     }
 }
 
-/// Where captured Canvas images live once they are too big for the chrome's store: one file per
+/// Where captured Trove images live once they are too big for the chrome's store: one file per
 /// capture, readable by other apps and outside the localStorage quota.
 fn media_dir() -> PathBuf {
     data_root().join("media")
@@ -1121,13 +1121,13 @@ impl App {
     /// Cut the chrome around the page and raise it over the page, or put it back behind. The
     /// sidebar floats over the page by drawing the chrome everywhere the page is not.
     fn reclip(&mut self) {
-        // A full overlay (command bar, settings) and Ask Rainbow's band both draw across the
+        // A full overlay (command bar, settings) and the shelved assistant's band both draw across the
         // window, so neither can live inside the sidebar column's clip.
         let mut want = self.chrome_over.filter(|_| !self.overlay && !self.asking);
         // The compact bar is its own strip across the top: it clips even when the sidebar
         // column is not out, because the page would otherwise cover it.
         self.chrome_bar_h = self.chrome_bar.filter(|_| !self.overlay && !self.asking).unwrap_or(0.0);
-        // Ask Rainbow's wash is a band of chrome over the live page; it is on while the question is asked.
+        // The shelved assistant's wash is a band of chrome over the live page; it is on while the question is asked.
         let band: Vec<Band> = if self.overlay { Vec::new() } else { self.chrome_band.clone() };
         if (self.chrome_bar_h > 0.0 || !band.is_empty()) && want.is_none() {
             want = Some(0.0);
@@ -1439,7 +1439,7 @@ impl App {
                 }
             }
             "eval" => {
-                // Read something out of a page (Ask Rainbow's read_page). The result is page
+                // Read something out of a page (the shelved assistant's read_page). The result is page
                 // data: the chrome treats it as untrusted text, never as instructions.
                 let req = m["req"].clone();
                 let proxy = self.proxy.clone();
@@ -1604,6 +1604,20 @@ impl App {
     }
 }
 
+/// Rainbow's window icon: the gnome-with-rainbow art at 256x256, embedded as straight RGBA
+/// (`assets/rainbow-icon-256.rgba`) so no image crate is needed to decode it. The taskbar,
+/// Alt-Tab and the window frame take the icon from here; Explorer takes the exe's from
+/// `build.rs` + `assets/rainbow.ico`. `None` (only if the blob were malformed) just leaves the
+/// platform default, which must never stop the window from opening.
+fn window_icon() -> Option<winit::window::Icon> {
+    winit::window::Icon::from_rgba(
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/rainbow-icon-256.rgba")).to_vec(),
+        256,
+        256,
+    )
+    .ok()
+}
+
 impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.window.is_some() {
@@ -1611,7 +1625,8 @@ impl ApplicationHandler<UserEvent> for App {
         }
         let attrs = Window::default_attributes()
             .with_title("Rainbow")
-            .with_inner_size(LogicalSize::new(1400.0, 900.0));
+            .with_inner_size(LogicalSize::new(1400.0, 900.0))
+            .with_window_icon(window_icon());
         #[cfg(windows)]
         let attrs = {
             use winit::platform::windows::WindowAttributesExtWindows;
@@ -2159,7 +2174,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
         let column = CreateRectRgn(col.0, col.1, col.2, col.3);
         CombineRgn(Some(rgn), Some(rgn), Some(column), RGN_OR);
         let _ = DeleteObject(column.into());
-        // ...plus Ask Rainbow's band, which is drawn over the live page.
+        // ...plus the shelved assistant's band, which is drawn over the live page.
         add_band(rgn, band, scale, w);
         // ...plus the compact bar's strip, for the same reason.
         if bar_h > 0.0 {
@@ -2177,7 +2192,7 @@ fn chrome_over(wv: &WebView, width: Option<f64>, scale: f64, win: (i32, i32), pa
 #[cfg(not(windows))]
 fn chrome_over(_: &WebView, _: Option<f64>, _: f64, _: (i32, i32), _: &[(u64, Rect, bool)], _: f64, _: f64, _: &[Band], _: bool, _: f64) {}
 
-/// Start Windows voice typing (Win+H) into whatever has focus: Ask Rainbow's input.
+/// Start Windows voice typing (Win+H) into whatever has focus: the shelved assistant's input.
 #[cfg(windows)]
 fn dictate() {
     use windows::Win32::UI::Input::KeyboardAndMouse::{

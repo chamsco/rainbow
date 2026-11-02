@@ -1,43 +1,43 @@
 'use strict';
-/* Canvas: Rainbow's global bookmarks, laid out as an infinite board of cards (links with
+/* Trove: Rainbow's global bookmarks, laid out as an infinite board of cards (links with
    screenshots, images, notes) grouped by topic and joined by lines. It is the same data
-   the command bar searches, so "bookmarks" and "the canvas" are one store. */
+   the command bar searches, so "bookmarks" and "the Trove" are one store. */
 (() => {
   const { h, $, uid, save, toast, hostOf, favicon } = Rainbow;
   const S = () => Rainbow.state;
-  const el = $('#canvasView');
+  const el = $('#troveView');
   const DAY = 864e5, STALE = 14 * DAY;
   const CELL_W = 1000, CELL_H = 820;
 
   el.innerHTML = `
-    <div class="cv-viewport" id="cvViewport">
-      <div class="cv-world" id="cvWorld"><svg class="cv-edges" id="cvEdges"></svg></div>
+    <div class="tv-viewport" id="tvViewport">
+      <div class="tv-world" id="tvWorld"><svg class="tv-edges" id="tvEdges"></svg></div>
     </div>
-    <div class="cv-top">
-      <label class="cv-search"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
-        <input id="cvSearch" placeholder="Search your canvas…" autocomplete="off"><kbd>/</kbd></label>
-      <div class="cv-top-right">
-        <button class="cv-pill" id="cvAdd"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add</button>
-        <span class="cv-count" id="cvCount"></span>
-        <button class="cv-pill" id="cvSurprise"><svg viewBox="0 0 16 16"><path d="M2.5 5h3l5 6h3M2.5 11h3l1.5-1.8M10.5 5h3M12 3.5 13.5 5 12 6.5M12 9.5l1.5 1.5L12 12.5"/></svg>Surprise me</button>
+    <div class="tv-top">
+      <label class="tv-search"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+        <input id="tvSearch" placeholder="Search Trove…" autocomplete="off"><kbd>/</kbd></label>
+      <div class="tv-top-right">
+        <button class="tv-pill" id="tvAdd"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add</button>
+        <span class="tv-count" id="tvCount"></span>
+        <button class="tv-pill" id="tvSurprise"><svg viewBox="0 0 16 16"><path d="M2.5 5h3l5 6h3M2.5 11h3l1.5-1.8M10.5 5h3M12 3.5 13.5 5 12 6.5M12 9.5l1.5 1.5L12 12.5"/></svg>Surprise me</button>
       </div>
     </div>
-    <nav class="cv-rail" id="cvRail" aria-label="Topics"></nav>
-    <div class="cv-bottom-left">
-      <button class="cv-pill" id="cvFilter" hidden></button>
-      <button class="cv-pill" id="cvCollection"><span class="cv-stack"></span>Recently discovered</button>
+    <nav class="tv-rail" id="tvRail" aria-label="Topics"></nav>
+    <div class="tv-bottom-left">
+      <button class="tv-pill" id="tvFilter" hidden></button>
+      <button class="tv-pill" id="tvCollection"><span class="tv-stack"></span>Recently discovered</button>
     </div>
-    <button class="cv-pill cv-discover" id="cvDiscover"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="m10.4 5.6-1.6 3.2-3.2 1.6 1.6-3.2z"/></svg>Discover new things</button>
-    <div class="cv-zoom"><button id="cvOut" aria-label="Zoom out">−</button><span id="cvZoomLabel">100%</span><button id="cvIn" aria-label="Zoom in">+</button><button id="cvHome" aria-label="Fit everything"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3"/></svg></button></div>
-    <div class="cv-empty" id="cvEmpty">
-      <p class="cv-date"></p>
+    <button class="tv-pill tv-discover" id="tvDiscover"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="m10.4 5.6-1.6 3.2-3.2 1.6 1.6-3.2z"/></svg>Discover new things</button>
+    <div class="tv-zoom"><button id="tvOut" aria-label="Zoom out">−</button><span id="tvZoomLabel">100%</span><button id="tvIn" aria-label="Zoom in">+</button><button id="tvHome" aria-label="Fit everything"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3"/></svg></button></div>
+    <div class="tv-empty" id="tvEmpty">
+      <p class="tv-date"></p>
       <h1>Nothing saved yet.</h1>
       <p>Press <kbd>Ctrl</kbd> <kbd>D</kbd> on any page, drop links or images here, paste, or double-click to write a note.</p>
     </div>
-    <div class="cv-modal" id="cvModal" hidden></div>
-    <div class="cv-collection" id="cvCol" hidden></div>`;
+    <div class="tv-modal" id="tvModal" hidden></div>
+    <div class="tv-collection" id="tvCol" hidden></div>`;
 
-  const vp = $('#cvViewport'), world = $('#cvWorld'), svg = $('#cvEdges');
+  const vp = $('#tvViewport'), world = $('#tvWorld'), svg = $('#tvEdges');
   const cam = { x: 0, y: 0, z: 1 };
   let filter = null, query = '', fitted = false, connectFrom = null;
 
@@ -111,7 +111,7 @@
     const t = Rainbow.tab(id);
     if (!t) return null;
     const dup = S().bookmarks.find(b => b.url === t.url);
-    if (dup) { toast('Already on your Canvas'); return dup; }
+    if (dup) { toast('Already in your Trove'); return dup; }
     // What the page says about itself (works in the native shell; same-origin only in a browser).
     const meta = await Rainbow.evalIn(id, `(() => { const m = s => document.querySelector(s)?.content || null;
       return { d: m('meta[property="og:description"]') || m('meta[name="description"]'), i: m('meta[property="og:image"]') || m('meta[name="twitter:image"]') }; })()`);
@@ -121,7 +121,7 @@
       note: (meta?.d || '').slice(0, 280), image: meta?.i || (shot ? await shrink(shot) : null),
       shot: shot && meta?.i ? await shrink(shot, 420) : null, ...extra,
     });
-    toast(`Saved to Canvas · ${b.topic}`);
+    toast(`Saved to Trove · ${b.topic}`);
     return b;
   }
   const saveUrl = (url, title, extra = {}) => S().bookmarks.find(b => b.url === url) || add({ kind: 'link', url, title: title || hostOf(url), ...extra });
@@ -156,13 +156,13 @@
   function undo() {
     const entry = undoStack.pop();
     if (!entry) return false;
-    redoStack.push(entry); restore(entry); toast('Restored to Canvas');
+    redoStack.push(entry); restore(entry); toast('Restored to Trove');
     return true;
   }
   function redo() {
     const entry = redoStack.pop();
     if (!entry) return false;
-    undoStack.push(entry); removeCard(entry); save(); draw(); Rainbow.render?.(); toast('Removed from Canvas');
+    undoStack.push(entry); removeCard(entry); save(); draw(); Rainbow.render?.(); toast('Removed from Trove');
     return true;
   }
   function remove(id) {
@@ -189,32 +189,32 @@
 
   function cardEl(b) {
     const dim = !matches(b);
-    const common = { class: `cv-card k-${b.kind}${dim ? ' dim' : ''}`, dataset: { id: b.id },
+    const common = { class: `tv-card k-${b.kind}${dim ? ' dim' : ''}`, dataset: { id: b.id },
       style: `transform:translate(${b.x}px,${b.y}px);width:${b.w}px;--tilt:${b.tilt}deg;--delay:${(b.id % 7) * -.9}s` };
     let inner;
     if (b.kind === 'note') {
-      inner = h('div', { class: 'cv-float' }, h('p', { class: 'cv-quote' }, b.note));
+      inner = h('div', { class: 'tv-float' }, h('p', { class: 'tv-quote' }, b.note));
     } else if (b.kind === 'image') {
-      inner = h('div', { class: 'cv-float' }, h('img', { class: 'cv-cutout', src: b.image, alt: b.title || '', draggable: false }),
-        b.title ? h('p', { class: 'cv-caption' }, b.title) : null,
+      inner = h('div', { class: 'tv-float' }, h('img', { class: 'tv-cutout', src: b.image, alt: b.title || '', draggable: false }),
+        b.title ? h('p', { class: 'tv-caption' }, b.title) : null,
         // A quiet mark that the words inside this capture are searchable.
-        b.ocr ? h('span', { class: 'cv-txt', title: b.ocr.slice(0, 400) }, 'text') : null);
+        b.ocr ? h('span', { class: 'tv-txt', title: b.ocr.slice(0, 400) }, 'text') : null);
     } else {
-      inner = h('div', { class: 'cv-float cv-paper' },
-        b.image ? h('div', { class: 'cv-media' }, h('img', { src: b.image, alt: '', draggable: false, onerror: e => e.target.parentElement.remove() }),
-          h('span', { class: 'cv-tag' }, b.topic)) : h('span', { class: 'cv-tag plain', style: `--c:${topicColor(b.topic)}` }, b.topic),
-        h('div', { class: 'cv-body' },
+      inner = h('div', { class: 'tv-float tv-paper' },
+        b.image ? h('div', { class: 'tv-media' }, h('img', { src: b.image, alt: '', draggable: false, onerror: e => e.target.parentElement.remove() }),
+          h('span', { class: 'tv-tag' }, b.topic)) : h('span', { class: 'tv-tag plain', style: `--c:${topicColor(b.topic)}` }, b.topic),
+        h('div', { class: 'tv-body' },
           h('h3', {}, b.title),
           b.note ? h('p', {}, b.note) : null),
-        h('footer', {}, favicon(b.url, 14), h('span', {}, hostOf(b.url)), isStale(b) ? h('em', { class: 'cv-stale' }, 'Revisit') : null));
+        h('footer', {}, favicon(b.url, 14), h('span', {}, hostOf(b.url)), isStale(b) ? h('em', { class: 'tv-stale' }, 'Revisit') : null));
     }
-    return h('div', common, inner, h('button', { class: 'cv-knob', title: 'Drag to another card to connect', 'aria-label': 'Connect' }));
+    return h('div', common, inner, h('button', { class: 'tv-knob', title: 'Drag to another card to connect', 'aria-label': 'Connect' }));
   }
 
   function drawEdges() {
     const byId = Object.fromEntries(S().bookmarks.map(b => [b.id, b]));
     const center = b => {
-      const node = world.querySelector(`.cv-card[data-id="${b.id}"]`);
+      const node = world.querySelector(`.tv-card[data-id="${b.id}"]`);
       return { x: b.x + b.w / 2, y: b.y + (node ? node.offsetHeight / 2 : 150) };
     };
     svg.innerHTML = S().edges.filter(e => byId[e.a] && byId[e.b]).map(e => {
@@ -226,20 +226,20 @@
 
   function draw() {
     const bs = S().bookmarks;
-    world.querySelectorAll('.cv-card,.cv-label').forEach(n => n.remove());
+    world.querySelectorAll('.tv-card,.tv-label').forEach(n => n.remove());
     const groups = {};
     for (const b of bs) (groups[b.topic] ||= []).push(b);
     for (const [t, items] of Object.entries(groups)) {
       const x = Math.min(...items.map(b => b.x)), y = Math.min(...items.map(b => b.y));
-      world.append(h('div', { class: `cv-label${filter && filter !== t ? ' dim' : ''}`, style: `transform:translate(${x}px,${y - 190}px)` },
+      world.append(h('div', { class: `tv-label${filter && filter !== t ? ' dim' : ''}`, style: `transform:translate(${x}px,${y - 190}px)` },
         h('h2', {}, t), h('span', {}, `${items.length} ${items.length === 1 ? 'thing' : 'things'} nearby`)));
     }
     for (const b of bs) world.append(cardEl(b));
     drawEdges();
-    $('#cvEmpty').hidden = bs.length > 0;
-    $('#cvEmpty .cv-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    $('#tvEmpty').hidden = bs.length > 0;
+    $('#tvEmpty .tv-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
     drawRail();
-    const f = $('#cvFilter');
+    const f = $('#tvFilter');
     f.hidden = !filter;
     f.title = filter ? `Showing ${filter} — click to clear` : '';
     if (filter) f.replaceChildren(h('i', { style: `background:${topicColor(filter)}` }), `Showing ${filter}`, h('b', { 'aria-hidden': 'true' }, '×'));
@@ -247,9 +247,9 @@
 
   function drawRail() {
     const ts = topics();
-    $('#cvRail').replaceChildren(
-      h('button', { class: `cv-topic${!filter ? ' on' : ''}`, onclick: () => setFilter(null) }, h('i', { style: 'background:var(--cv-ink)' }), h('span', {}, 'Everything')),
-      ...ts.map(t => h('button', { class: `cv-topic${filter === t ? ' on' : ''}`, onclick: () => { setFilter(t); flyToTopic(t); } },
+    $('#tvRail').replaceChildren(
+      h('button', { class: `tv-topic${!filter ? ' on' : ''}`, onclick: () => setFilter(null) }, h('i', { style: 'background:var(--tv-ink)' }), h('span', {}, 'Everything')),
+      ...ts.map(t => h('button', { class: `tv-topic${filter === t ? ' on' : ''}`, onclick: () => { setFilter(t); flyToTopic(t); } },
         h('i', { style: `background:${topicColor(t)}` }), h('span', {}, t), h('small', {}, String(S().bookmarks.filter(b => b.topic === t).length)))));
   }
   function setFilter(t) { filter = t; draw(); }
@@ -257,7 +257,7 @@
   /* ---------- camera ---------- */
   const apply = () => {
     world.style.transform = `translate(${cam.x}px,${cam.y}px) scale(${cam.z})`;
-    $('#cvZoomLabel').textContent = Math.round(cam.z * 100) + '%';
+    $('#tvZoomLabel').textContent = Math.round(cam.z * 100) + '%';
   };
   let anim = 0;
   function flyTo(x, y, z = cam.z) {
@@ -275,7 +275,7 @@
   }
   function flyToCard(b, pulse = true) {
     flyTo(b.x + b.w / 2, b.y + 150, Math.max(cam.z, .9));
-    if (pulse) setTimeout(() => world.querySelector(`.cv-card[data-id="${b.id}"]`)?.classList.add('pulse'), 500);
+    if (pulse) setTimeout(() => world.querySelector(`.tv-card[data-id="${b.id}"]`)?.classList.add('pulse'), 500);
   }
   function flyToTopic(t) {
     const items = S().bookmarks.filter(b => b.topic === t);
@@ -303,8 +303,8 @@
   vp.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
     cancelAnimationFrame(anim);
-    const card = e.target.closest('.cv-card');
-    const knob = e.target.closest('.cv-knob');
+    const card = e.target.closest('.tv-card');
+    const knob = e.target.closest('.tv-knob');
     const b = card && S().bookmarks.find(x => x.id === +card.dataset.id);
     // A pointer can already be gone (a fast tap, a pen, an assistive or synthetic event); capture
     // is a nicety, and letting it throw would abandon the rest of this handler and the card would
@@ -313,7 +313,7 @@
     if (knob || (b && e.altKey)) {
       connectFrom = b;
       drag = { kind: 'connect', b };
-      svg.insertAdjacentHTML('beforeend', '<path class="ghost" id="cvGhost"/>');
+      svg.insertAdjacentHTML('beforeend', '<path class="ghost" id="tvGhost"/>');
     } else if (b) drag = { kind: 'card', b, node: card, sx: e.clientX, sy: e.clientY, ox: b.x, oy: b.y, moved: false };
     else drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox: cam.x, oy: cam.y, vx: 0, vy: 0, lx: e.clientX, ly: e.clientY, lt: performance.now() };
   });
@@ -333,7 +333,7 @@
       drawEdges();
     } else if (drag.kind === 'connect') {
       const p = toWorld(e.clientX, e.clientY), b = drag.b;
-      document.getElementById('cvGhost')?.setAttribute('d', `M${b.x + b.w / 2},${b.y + 150} L${p.x},${p.y}`);
+      document.getElementById('tvGhost')?.setAttribute('d', `M${b.x + b.w / 2},${b.y + 150} L${p.x},${p.y}`);
     }
   });
   vp.addEventListener('pointerup', e => {
@@ -349,8 +349,8 @@
       d.node.classList.remove('lifted');
       if (d.moved) { save(); draw(); } else openCard(d.b);
     } else if (d.kind === 'connect') {
-      document.getElementById('cvGhost')?.remove();
-      const target = document.elementsFromPoint(e.clientX, e.clientY).find(n => n.classList?.contains('cv-card'));
+      document.getElementById('tvGhost')?.remove();
+      const target = document.elementsFromPoint(e.clientX, e.clientY).find(n => n.classList?.contains('tv-card'));
       if (target) connect(d.b.id, +target.dataset.id);
       connectFrom = null;
     }
@@ -363,13 +363,13 @@
     else { cam.x -= e.deltaX; cam.y -= e.deltaY; apply(); }
   }, { passive: false });
   vp.addEventListener('dblclick', e => {
-    if (e.target.closest('.cv-card')) return;
+    if (e.target.closest('.tv-card')) return;
     const p = toWorld(e.clientX, e.clientY);
     const b = addNote('New note', { x: Math.round(p.x - 115), y: Math.round(p.y - 30), topic: filter || nearestTopic(p) });
     openCard(b, true);
   });
   vp.addEventListener('contextmenu', e => {
-    const card = e.target.closest('.cv-card'), path = e.target.closest('path[data-a]');
+    const card = e.target.closest('.tv-card'), path = e.target.closest('path[data-a]');
     if (path) { e.preventDefault(); Rainbow.menu(e.clientX, e.clientY, [['Remove connection', () => { S().edges = S().edges.filter(x => !(x.a === +path.dataset.a && x.b === +path.dataset.b)); save(); drawEdges(); }, 'danger']]); return; }
     if (!card) return;
     e.preventDefault();
@@ -379,12 +379,12 @@
       ['Open card', () => openCard(b)],
       ['Connect to…', () => { connectFrom = b; toast('Click the card to connect to'); }],
       ...topics().filter(t => t !== b.topic).slice(0, 6).map(t => [`Move to ${t}`, () => { b.topic = t; Object.assign(b, place(t, b.w)); save(); draw(); }]),
-      '-', ['Remove from Canvas', () => remove(b.id), 'danger'],
+      '-', ['Remove from Trove', () => remove(b.id), 'danger'],
     ]);
   });
   vp.addEventListener('click', e => {
     if (!connectFrom) return;
-    const card = e.target.closest('.cv-card');
+    const card = e.target.closest('.tv-card');
     if (card && +card.dataset.id !== connectFrom.id) connect(connectFrom.id, +card.dataset.id);
     connectFrom = null;
   }, true);
@@ -410,7 +410,7 @@
     else if (!e.dataTransfer.files.length && e.dataTransfer.getData('text/plain')) addNote(e.dataTransfer.getData('text/plain').slice(0, 600), at);
   });
   addEventListener('paste', async e => {
-    if (Rainbow.view !== 'canvas' || e.target.closest?.('input,textarea')) return;
+    if (Rainbow.view !== 'trove' || e.target.closest?.('input,textarea')) return;
     const r = vp.getBoundingClientRect(), p = toWorld(r.left + r.width / 2, r.top + r.height / 2);
     const at = { x: Math.round(p.x - 120), y: Math.round(p.y - 120), topic: filter || nearestTopic(p) };
     const img = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
@@ -422,15 +422,15 @@
 
   /* ---------- open card ---------- */
   function openCard(b, edit = false) {
-    const m = $('#cvModal');
-    const note = h('textarea', { class: 'cv-note', value: b.note || '', placeholder: b.kind === 'note' ? 'Write a note…' : 'Why did you save this?', rows: 3,
+    const m = $('#tvModal');
+    const note = h('textarea', { class: 'tv-note', value: b.note || '', placeholder: b.kind === 'note' ? 'Write a note…' : 'Why did you save this?', rows: 3,
       oninput: e => { b.note = e.target.value; save(); } });
     const title = h('h2', { contenteditable: 'plaintext-only', spellcheck: 'false', oninput: e => { b.title = e.target.textContent; save(); } }, b.title || '');
-    m.replaceChildren(h('article', { class: `cv-sheet k-${b.kind}` },
-      h('button', { class: 'cv-close', 'aria-label': 'Close', onclick: closeCard }, '×'),
-      b.image ? h('div', { class: 'cv-hero' }, h('img', { src: b.image, alt: '' })) : null,
-      h('div', { class: 'cv-sheet-body' },
-        h('div', { class: 'cv-meta' }, h('i', { style: `background:${topicColor(b.topic)}` }),
+    m.replaceChildren(h('article', { class: `tv-sheet k-${b.kind}` },
+      h('button', { class: 'tv-close', 'aria-label': 'Close', onclick: closeCard }, '×'),
+      b.image ? h('div', { class: 'tv-hero' }, h('img', { src: b.image, alt: '' })) : null,
+      h('div', { class: 'tv-sheet-body' },
+        h('div', { class: 'tv-meta' }, h('i', { style: `background:${topicColor(b.topic)}` }),
           h('select', { 'aria-label': 'Topic', onchange: e => { const t = e.target.value === '+' ? prompt('New topic name')?.trim() : e.target.value; if (t) { b.topic = t; b.userTopic = true; Object.assign(b, place(t, b.w)); save(); } } },
             [...new Set([...topics(), b.topic])].map(t => h('option', { value: t, selected: t === b.topic }, t)), h('option', { value: '+' }, 'New topic…')),
           b.url ? h('span', {}, hostOf(b.url)) : null,
@@ -438,23 +438,23 @@
           b.url ? h('span', {}, b.visits ? `Revisited ${b.visits}×` : 'Not revisited yet') : null),
         b.kind !== 'note' ? title : null,
         note,
-        b.ocrState === 'pending' ? h('p', { class: 'cv-ocr pending' }, 'Reading the text…')
-          : b.ocr ? h('div', { class: 'cv-ocr' }, h('span', { class: 'cv-ocr-t' }, 'Text found in this capture'), h('p', {}, b.ocr)) : null,
-        b.shot ? h('img', { class: 'cv-shot', src: b.shot, alt: 'Screenshot when saved' }) : null),
+        b.ocrState === 'pending' ? h('p', { class: 'tv-ocr pending' }, 'Reading the text…')
+          : b.ocr ? h('div', { class: 'tv-ocr' }, h('span', { class: 'tv-ocr-t' }, 'Text found in this capture'), h('p', {}, b.ocr)) : null,
+        b.shot ? h('img', { class: 'tv-shot', src: b.shot, alt: 'Screenshot when saved' }) : null),
       h('footer', {},
-        h('button', { class: 'cv-btn', onclick: () => { remove(b.id); closeCard(); } }, 'Remove'),
-        b.url ? h('button', { class: 'cv-btn', onclick: () => navigator.clipboard?.writeText(b.url).then(() => toast('Link copied')) }, 'Copy link') : null,
+        h('button', { class: 'tv-btn', onclick: () => { remove(b.id); closeCard(); } }, 'Remove'),
+        b.url ? h('button', { class: 'tv-btn', onclick: () => navigator.clipboard?.writeText(b.url).then(() => toast('Link copied')) }, 'Copy link') : null,
         h('span', { style: 'flex:1' }),
-        b.url ? h('button', { class: 'cv-btn dark', onclick: () => { closeCard(); revisit(b); } }, 'Revisit') : h('button', { class: 'cv-btn dark', onclick: closeCard }, 'Done'))));
+        b.url ? h('button', { class: 'tv-btn dark', onclick: () => { closeCard(); revisit(b); } }, 'Revisit') : h('button', { class: 'tv-btn dark', onclick: closeCard }, 'Done'))));
     m.hidden = false;
     m.onclick = e => { if (e.target === m) closeCard(); };
     if (edit) { note.focus(); note.select(); }
   }
-  function closeCard() { const m = $('#cvModal'); if (!m.hidden) { m.hidden = true; draw(); } }
+  function closeCard() { const m = $('#tvModal'); if (!m.hidden) { m.hidden = true; draw(); } }
 
   /* ---------- collection ---------- */
   function openCollection(tabName = 'saved') {
-    const c = $('#cvCol');
+    const c = $('#tvCol');
     const bs = S().bookmarks.filter(b => b.kind !== 'note');
     const sets = {
       discovered: ['Recently discovered', bs.filter(b => b.discovered).sort((a, b) => b.discovered - a.discovered)],
@@ -464,28 +464,28 @@
     };
     const [title, items] = sets[tabName];
     c.replaceChildren(
-      h('button', { class: 'cv-close', 'aria-label': 'Close', onclick: () => (c.hidden = true) }, '×'),
-      h('header', {}, h('div', {}, h('p', {}, 'Your canvas'), h('h1', {}, title)),
-        h('div', { class: 'cv-seg' }, Object.entries({ discovered: 'Discovered', saved: 'Saved', revisited: 'Revisited', soon: 'Revisit soon' }).map(([k, l]) =>
+      h('button', { class: 'tv-close', 'aria-label': 'Close', onclick: () => (c.hidden = true) }, '×'),
+      h('header', {}, h('div', {}, h('p', {}, 'Your Trove'), h('h1', {}, title)),
+        h('div', { class: 'tv-seg' }, Object.entries({ discovered: 'Discovered', saved: 'Saved', revisited: 'Revisited', soon: 'Revisit soon' }).map(([k, l]) =>
           h('button', { class: k === tabName ? 'on' : '', onclick: () => openCollection(k) }, l, h('small', {}, String(sets[k][1].length)))))),
-      items.length ? h('div', { class: 'cv-grid' }, items.map(b => h('button', { class: 'cv-mini', onclick: () => { c.hidden = true; flyToCard(b); } },
-        b.image ? h('img', { src: b.image, alt: '' }) : h('span', { class: 'cv-mini-ph', style: `--c:${topicColor(b.topic)}` }, hostOf(b.url || '')),
-        h('span', {}, b.title || hostOf(b.url))))) : h('p', { class: 'cv-none' }, tabName === 'soon' ? 'Nothing has gone stale. Links you have not opened for two weeks show up here.' : tabName === 'discovered' ? 'Press Discover new things to find something.' : 'Nothing here yet.'));
+      items.length ? h('div', { class: 'tv-grid' }, items.map(b => h('button', { class: 'tv-mini', onclick: () => { c.hidden = true; flyToCard(b); } },
+        b.image ? h('img', { src: b.image, alt: '' }) : h('span', { class: 'tv-mini-ph', style: `--c:${topicColor(b.topic)}` }, hostOf(b.url || '')),
+        h('span', {}, b.title || hostOf(b.url))))) : h('p', { class: 'tv-none' }, tabName === 'soon' ? 'Nothing has gone stale. Links you have not opened for two weeks show up here.' : tabName === 'discovered' ? 'Press Discover new things to find something.' : 'Nothing here yet.'));
     c.hidden = false;
   }
 
   /* ---------- discover ---------- */
   /* Pick a mood and a subject; Rainbow finds a Wikipedia article that fits and drops it
-     on the board under that subject. ponytail: the mood is a search hint, not a model. */
+     in your Trove under that subject. ponytail: the mood is a search hint, not a model. */
   const MOODS = { surprising: 'unexpected discovery', strange: 'unusual phenomenon', anything: '', useful: 'how it works practical' };
   const SUBJECTS = ['science', 'space', 'psychology', 'geography', 'history', 'art', 'music', 'nature', 'technology', 'food', 'language', 'architecture'];
   const DAILY = 20;
   const today = () => new Date().toDateString();
   const usedToday = () => { const d = S().discover ||= { day: today(), n: 0 }; if (d.day !== today()) Object.assign(d, { day: today(), n: 0 }); return d; };
-  const countLabel = () => { $('#cvCount').textContent = `${usedToday().n} of ${DAILY} today`; };
+  const countLabel = () => { $('#tvCount').textContent = `${usedToday().n} of ${DAILY} today`; };
   function wheel(label, items, pick) {
     let at = Math.max(0, items.indexOf(pick));
-    const ul = h('ul', { class: 'cv-wheel', role: 'listbox', 'aria-label': label, tabindex: 0 });
+    const ul = h('ul', { class: 'tv-wheel', role: 'listbox', 'aria-label': label, tabindex: 0 });
     // Seven slots with the pick in the middle; slots past either end stay empty.
     const draw = () => ul.replaceChildren(...[-3, -2, -1, 0, 1, 2, 3].map(d => { const i = at + d, x = items[i];
       return h('li', { role: x ? 'option' : 'presentation', 'aria-selected': x ? String(!d) : null, class: d ? '' : 'on', style: `--d:${Math.abs(d)}`,
@@ -496,13 +496,13 @@
     return { el: ul, get value() { return items[at]; } };
   }
   function discover() {
-    const m = $('#cvModal'), last = S().discoverPick || {};
+    const m = $('#tvModal'), last = S().discoverPick || {};
     const mood = wheel('Mood', Object.keys(MOODS), last.mood || 'anything'), subject = wheel('Subject', SUBJECTS, last.subject || 'science');
-    m.replaceChildren(h('div', { class: 'cv-sheet cv-picker' },
+    m.replaceChildren(h('div', { class: 'tv-sheet tv-picker' },
       h('h2', {}, 'Choose a mood and a subject'),
-      h('div', { class: 'cv-wheels' }, mood.el, subject.el),
-      h('footer', {}, h('button', { class: 'cv-btn', onclick: () => { m.hidden = true; } }, 'Cancel'),
-        h('button', { class: 'cv-btn dark', onclick: () => { m.hidden = true; S().discoverPick = { mood: mood.value, subject: subject.value }; find(mood.value, subject.value); } }, 'Take me there'))));
+      h('div', { class: 'tv-wheels' }, mood.el, subject.el),
+      h('footer', {}, h('button', { class: 'tv-btn', onclick: () => { m.hidden = true; } }, 'Cancel'),
+        h('button', { class: 'tv-btn dark', onclick: () => { m.hidden = true; S().discoverPick = { mood: mood.value, subject: subject.value }; find(mood.value, subject.value); } }, 'Take me there'))));
     m.hidden = false;
     m.onclick = e => { if (e.target === m) m.hidden = true; };
     subject.el.focus();
@@ -527,33 +527,33 @@
   }
 
   /* ---------- chrome ---------- */
-  $('#cvSearch').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); draw(); });
-  $('#cvSearch').addEventListener('keydown', e => {
+  $('#tvSearch').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); draw(); });
+  $('#tvSearch').addEventListener('keydown', e => {
     if (e.key === 'Enter') { const b = S().bookmarks.find(matches); if (b) flyToCard(b); }
     if (e.key === 'Escape') { e.target.value = ''; query = ''; draw(); e.target.blur(); e.stopPropagation(); }
   });
   addEventListener('keydown', e => {
-    if (Rainbow.view !== 'canvas' || e.target.closest?.('input,textarea,[contenteditable]')) return;
-    if (e.key === '/') { e.preventDefault(); $('#cvSearch').focus(); }
-    if (e.key === 'Escape') { closeCard(); $('#cvCol').hidden = true; }
+    if (Rainbow.view !== 'trove' || e.target.closest?.('input,textarea,[contenteditable]')) return;
+    if (e.key === '/') { e.preventDefault(); $('#tvSearch').focus(); }
+    if (e.key === 'Escape') { closeCard(); $('#tvCol').hidden = true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
   });
-  $('#cvSurprise').onclick = () => { const bs = S().bookmarks; if (bs.length) flyToCard(bs[Math.floor(Math.random() * bs.length)]); };
-  $('#cvAdd').onclick = e => Rainbow.menu(e.clientX - 120, e.clientY + 16, [
+  $('#tvSurprise').onclick = () => { const bs = S().bookmarks; if (bs.length) flyToCard(bs[Math.floor(Math.random() * bs.length)]); };
+  $('#tvAdd').onclick = e => Rainbow.menu(e.clientX - 120, e.clientY + 16, [
     ['Save current tab', () => Rainbow.activeTab() ? saveTab(Rainbow.activeTab().id) : toast('No tab open')],
     ['Add a link…', () => { const u = prompt('Link'); if (u) { const url = Rainbow.toUrl(u); const b = saveUrl(url, hostOf(url)); flyToCard(b); } }],
     ['Write a note', () => { const r = vp.getBoundingClientRect(); const p = toWorld(r.left + r.width / 2, r.top + r.height / 2); openCard(addNote('New note', { x: p.x - 115, y: p.y, topic: filter || nearestTopic(p) }), true); }],
     ['Add all open tabs in this space', () => { const s = Rainbow.space(); [...s.pinned, ...s.today].forEach(id => Rainbow.tab(id) && saveUrl(Rainbow.tab(id).url, Rainbow.tab(id).title)); }],
   ]);
-  $('#cvCollection').onclick = () => openCollection('discovered');
-  $('#cvDiscover').onclick = discover;
-  $('#cvFilter').onclick = () => setFilter(null);
-  $('#cvIn').onclick = () => zoomAt(1.2);
-  $('#cvOut').onclick = () => zoomAt(1 / 1.2);
-  $('#cvHome').onclick = () => fit();
+  $('#tvCollection').onclick = () => openCollection('discovered');
+  $('#tvDiscover').onclick = discover;
+  $('#tvFilter').onclick = () => setFilter(null);
+  $('#tvIn').onclick = () => zoomAt(1.2);
+  $('#tvOut').onclick = () => zoomAt(1 / 1.2);
+  $('#tvHome').onclick = () => fit();
 
-  /* Sorting. A small model that runs on this machine decides which topic a captured card belongs to.
-     Until one is installed (set `Rainbow.localModel = { classify(card) }`) a keyword scorer answers the same
+  /* Sorting. A small local model on this machine files Trove cards under a topic. Until one is
+     installed (set `Rainbow.localModel = { classify(card) }`) a keyword scorer answers the same
      call, so nothing else changes the day the model arrives. */
   const TOPICS = {
     Code: ['github', 'code', 'api', 'rust', 'python', 'javascript', 'typescript', 'react', 'component', 'frontend', 'backend', 'database', 'css', 'html', 'server', 'debug', 'framework', 'library', 'developer', 'function', 'compiler', 'stack', 'bug', 'repo', 'software', 'programming'],
@@ -584,20 +584,20 @@
     }
     return scoreTopic(`${title} ${text} ${hostOf(url)}`) || (url ? Rainbow.siteName(url) : 'Saved');
   }
-  /* Right-click an image, or select text and right-click: it lands on the Canvas, under the topic the
+  /* Right-click an image, or select text and right-click: it lands in your Trove, under the topic the
      classifier picks. */
   async function capture(c) {
     const topic = await classify({ title: c.title, text: c.text, url: c.url });
     const b = c.kind === 'image'
       ? add({ kind: 'image', image: c.src, title: c.title || 'Image', url: c.url, topic })
       : add({ kind: 'note', note: String(c.text).slice(0, 600), title: '', source: c.url, topic });
-    toast(`Saved to Canvas · ${topic}`);
+    toast(`Saved to Trove · ${topic}`);
     return b;
   }
 
-  /* A capture is saved before it is understood. This runs afterwards: read the text out of the
-     image, keep it for search, then let the classifier name the topic. A topic the user chose by
-     hand (`userTopic`) is never overwritten. */
+  /* A capture is saved before it is understood. This runs afterwards: OCR on Windows reads the text
+     out of the image, keeps it for search, then lets the classifier name the topic. A topic the user
+     chose by hand (`userTopic`) is never overwritten. */
   async function enrich(id, dataUrl) {
     const b = S().bookmarks.find(x => x.id === id);
     if (!b || !dataUrl) return;
@@ -615,13 +615,13 @@
     save(); draw(); Rainbow.render?.();
   }
 
-  Rainbow.canvas = {
+  Rainbow.trove = {
     topicWords: () => TOPICS,
     capture, classify, saveTab, saveUrl, addNote, add, remove, undo, redo, connect, touch, fit, flyToCard, openCollection, discover, enrich,
     showTopic: t => { setFilter(t); flyToTopic(t); },
     find: q => S().bookmarks.filter(b => haystack(b).some(x => (x || '').toLowerCase().includes(q.toLowerCase()))),
     show() { countLabel(); draw(); if (!fitted) { fitted = true; fit(); } else apply(); },
-    hide() { closeCard(); $('#cvCol').hidden = true; },
+    hide() { closeCard(); $('#tvCol').hidden = true; },
     redraw: draw,
   };
 })();

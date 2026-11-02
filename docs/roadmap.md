@@ -4,6 +4,13 @@ Where Rainbow goes next, and what it can learn from [Zephium](https://github.com
 browser built the same way (Rust shell, the system's own web engine, an HTML interface, WebView2 on Windows and WebKit on
 macOS). Rainbow's finished and open work is in [tasks.md](tasks.md); this file is the plan.
 
+## Shelved for now
+
+The assistant chat, the docked composer, prompts, routines, the work board and the Decider model are shelved while the
+browser side settles. The code that exists is parked in `rust-port/crates/rainbow/ui/.shelved/`; the plans below are kept
+as written, marked **Shelved —**, so nothing has to be rediscovered if they come back. What ships now is the browser plus
+the local OCR (Windows' own) and the Sorter model that files Trove cards under topics — no chat, no cloud, no keys.
+
 ## Licence first
 
 Zephium is **MPL-2.0**: a file-level licence. Using its ideas, behaviour and structure is free. Copying a file, or a
@@ -16,33 +23,30 @@ whole module do we keep it in its own MPL-marked file. Things Zephium itself bui
 
 ## What to take, in order
 
-### 1. The assistant docked in the page (high)
+### 1. Shelved — the assistant docked in the page (high)
 Zephium puts the assistant's composer at the bottom of the page, cut into the page frame like a notch: a few tool icons,
-"What do you want to do?", a mic. Ask Rainbow today is a floating window with a wash behind it.
+"What do you want to do?", a mic. The shelved Rainbow assistant was a floating window with a wash behind it.
 - Dock a composer into the bottom edge of the page frame; it grows into the chat on use.
-- **The page's corner radius equals the app frame's.** On Windows 11 the frame is 8 px; the page, the composer notch and
-  the split panes follow one radius token (today Corner radius is a setting, default 10).
 - Keep the wash for long answers; the notch is the resting state.
 
 ### 2. Tasks (high)
-A real Tasks panel, which Routines and the assistant can write into:
+A real Tasks panel:
 - Capture in plain words ("call Anna tomorrow at 3"), parsed into a day and time; lists Today, Tomorrow, Upcoming.
 - A task remembers the page it came from, and opens it.
 - Check off, undo, subtasks, priority. A count badge on the panel's edge.
-- "Make tasks" on any plan the assistant produces; each step becomes a task linked back to its source.
 - Stored locally, one file per list so other apps can read them.
 
-### 3. Work canvas for the assistant (high, builds on Canvas)
-Zephium's agent flows live on a canvas, not in a chat scroll: a prompt node with "Your memory" and a skill attached,
+### 3. Shelved — work board for the assistant (high, builds on Trove)
+Zephium's agent flows live on a board, not in a chat scroll: a prompt node with "Your memory" and a skill attached,
 questions asked inline, helper branches that each browse a live page you can watch (Working / Done), result cards (photos,
 price, flight timelines), a plan card, and finally tasks.
-- Rainbow's Canvas already holds cards; add **run nodes**: prompt, memory, helper, result, plan.
+- Rainbow's Trove already holds cards; add **run nodes**: prompt, memory, helper, result, plan.
 - Helpers use a real tab in the background and show a live preview card.
 - Everything with an effect (post, buy, change) waits for an explicit OK; reading and placing cards does not.
 - **Skills** (small written procedures: trip planning, compare and choose, plan my day, weekly status) and **memory**
   (what Rainbow knows about you, local, editable).
-- Choose a model per step: built-in commands, your own key (Anthropic, OpenAI, Google, Mistral, Groq, OpenRouter and
-  others), a local server (Ollama, LM Studio), or the on-device Decider. Keys go in the system keychain, not in settings.
+- Choose a model per step: built-in commands, a key for a model provider, a local server (Ollama, LM Studio), or the
+  on-device Decider. Keys go in the system keychain, not in settings.
 
 ### 4. A native ad and tracker blocker (high)
 How Zephium does it, and how Rainbow would:
@@ -56,7 +60,7 @@ How Zephium does it, and how Rainbow would:
 - **Out of scope on purpose:** scriptlets, response rewriting, a proxy or certificate. Say plainly what is not covered.
 - Rainbow already has per-site Boosts, which can host the picker's saved rules.
 
-### 5. Routines, planned (high). See "Routines and tasks" below.
+### 5. Shelved — routines, planned (high). See "Routines and tasks" below.
 
 ### 6. Quality-of-life that costs little (medium)
 - Inactive tabs sleep and wake when you return (WebView2 can suspend a hidden page).
@@ -70,6 +74,8 @@ How Zephium does it, and how Rainbow would:
 - Private windows keep nothing.
 
 ### 7. Platforms and look (medium)
+- **Radius:** one token for the page, split panes, Essentials and the floating surfaces; the page's corner radius equals
+  the app frame's (8 px on Windows 11; today Corner radius is a setting, default 10, and can only make corners less round).
 - **macOS:** the top bar and navigation bar as liquid glass (a vibrancy view behind the interface); window buttons as native.
 - **Windows:** Mica backdrop; caption buttons as drawn now (thin glyphs, flush to the corner, Close turns red).
 - **Linux:** the shell's web view library uses WebKitGTK there, not Chromium. Chromium on Linux means embedding CEF, which
@@ -80,9 +86,9 @@ How Zephium does it, and how Rainbow would:
 A short video shows trackpad gestures moving a page around. Worth a prototype once split view and spaces are steady: swipe
 between spaces, pinch to the tab overview.
 
-## Routines and tasks
+## Shelved — routines and tasks
 
-They are different things and should stay different.
+Kept as the design if routines come back. They are different things and should stay different.
 
 |  | Task | Routine |
 | --- | --- | --- |
@@ -95,24 +101,24 @@ They are different things and should stay different.
 1. **A trigger:** at a time (daily, weekdays, weekly), on start, or when you open a site. Missed runs happen at the next start,
    once, and say so.
 2. **A grant, shown up front:** what the routine may do without asking. The default is read the web, read open tabs, put
-   cards on the Canvas, add tasks. Anything with an effect (send, post, buy, change a setting) always waits for an OK, which
+   cards on Trove, add tasks. Anything with an effect (send, post, buy, change a setting) always waits for an OK, which
    arrives as a notice.
 3. **A run, not a message:** each execution is saved as a run with its time, what it read, what it produced and whether it
-   succeeded. Results appear as Canvas cards and, if it found something to do, as tasks. Failed runs say why and offer Retry.
+   succeeded. Results appear as Trove cards and, if it found something to do, as tasks. Failed runs say why and offer Retry.
 4. **A budget:** a cap on steps and time per run, and a model choice per routine (built-in, on-device, or a key).
 5. **A skill** can be attached ("weekly status", "morning reading"), the same skills the assistant uses.
 6. **Quiet by default:** a run finishes silently unless it needs you; one summary card per day at most.
 7. **Off the page's reach:** a page can never create or change a routine; only the interface can.
 
-Today's Routines (a prompt that runs at start or daily while Rainbow is open) are step 1 of this. The next steps are the run
-log, the grant and the notice for anything that needs approval.
+The routines that ran at start or daily while Rainbow was open were step 1 of this. The next steps are the run log, the
+grant and the notice for anything that needs approval.
 
 ## Suggested order
 1. Window buttons and radius tokens (small; buttons done).
-2. Tasks panel (unblocks routines and "Make tasks").
+2. Tasks panel (unblocks tasks linked to a page).
 3. Native blocker (self-contained, high value, can ship alone).
-4. Docked composer in the page.
-5. Routines with runs and grants.
-6. Work canvas: run nodes, helpers, plan → tasks.
-7. Skills and memory; provider keys in the keychain.
+4. Shelved — docked composer in the page.
+5. Shelved — routines with runs and grants.
+6. Shelved — work board: run nodes, helpers, plan → tasks.
+7. Shelved — skills and memory; provider keys in the keychain.
 8. The rest of the quality-of-life list; macOS glass; Linux decision.
